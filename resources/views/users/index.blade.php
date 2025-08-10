@@ -148,7 +148,7 @@
     {{-- Modal Create (2 kolom) --}}
     @if ($me->role === 'hr')
         <div class="modal fade" id="createModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
                 <form class="modal-content" method="POST" action="{{ route('users.store') }}"
                     enctype="multipart/form-data">
                     @csrf
@@ -218,7 +218,7 @@
 
         {{-- Modal Edit (2 kolom, password opsional) --}}
         <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
                 <form id="editForm" class="modal-content" method="POST" enctype="multipart/form-data">
                     @csrf @method('PUT')
                     <div class="modal-header">

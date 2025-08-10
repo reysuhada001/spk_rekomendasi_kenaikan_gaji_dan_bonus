@@ -2,7 +2,7 @@
 <meta name="viewport"
     content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
 
-<title>Keuangan UCIC</title>
+<title>PT ALVAREL TECHNOLOGY INNOVATION</title>
 
 <meta name="description" content="" />
 

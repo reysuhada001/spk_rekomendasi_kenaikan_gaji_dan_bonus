@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\KpiUmum;
+use App\Models\KpiUmumRealization;
+use App\Models\KpiUmumRealizationItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class KpiUmumController extends Controller
 {
@@ -56,12 +59,17 @@ class KpiUmumController extends Controller
             'bulan'  => 'required|integer|min:1|max:12',
             'tahun'  => 'required|integer|min:2000|max:2100',
         ]);
-
-        // bobot tidak diterima dari input → null/default
+        // bobot tidak diinput, akan direset ke 0
         $validated['bobot'] = null;
 
-        KpiUmum::create($validated);
-        return redirect()->route('kpi-umum.index')->with('success','KPI Umum berhasil ditambahkan.');
+        DB::transaction(function() use ($validated) {
+            KpiUmum::create($validated);
+            // penambahan data → reset bobot periode terkait
+            $this->invalidateWeightsAndRealizations((int)$validated['bulan'], (int)$validated['tahun']);
+        });
+
+        return redirect()->route('kpi-umum.index')
+            ->with('success','KPI Umum berhasil ditambahkan. Bobot periode terkait direset ke 0 — silakan lakukan pembobotan ulang.');
     }
 
     public function update(Request $request, KpiUmum $kpi)
@@ -75,14 +83,59 @@ class KpiUmumController extends Controller
             'tahun'  => 'required|integer|min:2000|max:2100',
         ]);
 
-        // bobot tetap tidak bisa diubah dari form CRUD
-        $kpi->update($validated);
-        return redirect()->route('kpi-umum.index')->with('success','KPI Umum berhasil diperbarui.');
+        DB::transaction(function() use ($kpi, $validated) {
+            $oldBulan = (int)$kpi->bulan;
+            $oldTahun = (int)$kpi->tahun;
+
+            $kpi->update($validated);
+
+            $newBulan = (int)$validated['bulan'];
+            $newTahun = (int)$validated['tahun'];
+
+            if ($oldBulan !== $newBulan || $oldTahun !== $newTahun) {
+                $this->invalidateWeightsAndRealizations($oldBulan, $oldTahun);
+                $this->invalidateWeightsAndRealizations($newBulan, $newTahun);
+            }
+        });
+
+        return redirect()->route('kpi-umum.index')
+            ->with('success','KPI Umum berhasil diperbarui.' . 
+                (($request->bulan != $kpi->bulan || $request->tahun != $kpi->tahun) ? ' Bobot periode terkait direset ke 0 — silakan lakukan pembobotan ulang.' : ''));
     }
+
 
     public function destroy(KpiUmum $kpi)
     {
-        $kpi->delete();
-        return redirect()->route('kpi-umum.index')->with('success','KPI Umum berhasil dihapus.');
+        DB::transaction(function() use ($kpi) {
+            $bulan = (int)$kpi->bulan;
+            $tahun = (int)$kpi->tahun;
+            $kpi->delete();
+            // pengurangan data → reset bobot periode terkait
+            $this->invalidateWeightsAndRealizations($bulan, $tahun);
+        });
+
+        return redirect()->route('kpi-umum.index')
+            ->with('success','KPI Umum berhasil dihapus. Bobot periode terkait direset ke 0 — silakan lakukan pembobotan ulang.');
+    }
+
+    private function invalidateWeightsAndRealizations(int $bulan, int $tahun): void
+    {
+        // 1) reset bobot KPI
+        KpiUmum::where('bulan',$bulan)->where('tahun',$tahun)->update(['bobot'=>0]);
+
+        // 2) invalidate semua realisasi periode tsb
+        $reals = KpiUmumRealization::where('bulan',$bulan)->where('tahun',$tahun)->get();
+
+        foreach ($reals as $r) {
+            // hapus semua item realisasi agar pasti input ulang
+            KpiUmumRealizationItem::where('realization_id',$r->id)->delete();
+
+            // tandai stale + reset skor
+            $r->update([
+                'total_score' => 0,
+                'status'      => 'stale',
+                'hr_note'     => 'Perubahan data KPI. Mohon input ulang.'
+            ]);
+        }
     }
 }

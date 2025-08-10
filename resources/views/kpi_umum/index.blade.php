@@ -69,7 +69,7 @@
                                     <td>{{ $k->satuan ?? '-' }}</td>
                                     <td class="text-end">{{ number_format($k->target, 0, ',', '.') }}</td>
                                     <td class="text-end">
-                                        {{ $k->bobot !== null ? rtrim(rtrim(number_format($k->bobot, 8, '.', ''), '0'), '.') : '-' }}
+                                        {{ $k->bobot !== null ? rtrim(rtrim(number_format(round($k->bobot * 100, 2), 0, '.', ''), '0'), '.') . '%' : '-' }}
                                     </td>
                                     <td>{{ $bulanList[$k->bulan] ?? $k->bulan }}</td>
                                     <td>{{ $k->tahun }}</td>
@@ -134,7 +134,7 @@
     {{-- Modal Create (2 kolom, tanpa field bobot) --}}
     @if ($me->role === 'hr')
         <div class="modal fade" id="createModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
                 <form class="modal-content" method="POST" action="{{ route('kpi-umum.store') }}">
                     @csrf
                     <div class="modal-header">
@@ -254,7 +254,7 @@
     <script>
         const Toast = Swal.mixin({
             toast: true,
-            position: 'top-end',
+            position: 'bottom-end',
             showConfirmButton: false,
             timer: 2500,
             timerProgressBar: true

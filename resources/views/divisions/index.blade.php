@@ -109,7 +109,7 @@
 
     {{-- Modal Create --}}
     <div class="modal fade" id="createModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <form class="modal-content" method="POST" action="{{ route('divisions.store') }}">
                 @csrf
                 <div class="modal-header">
@@ -133,7 +133,7 @@
 
     {{-- Modal Edit --}}
     <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <form id="editForm" class="modal-content" method="POST">
                 @csrf @method('PUT')
                 <div class="modal-header">

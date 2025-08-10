@@ -47,8 +47,44 @@
 
                 <li class="menu-item {{ request()->routeIs('kpi-umum.index') ? 'active' : '' }}">
                     <a href="{{ route('kpi-umum.index') }}" class="menu-link">
-                        <i class="menu-icon tf-icons bx bx-line-chart"></i>
+                        <i class="menu-icon tf-icons bx bx-data"></i>
                         <div data-i18n="Analytics">Data</div>
+                    </a>
+                </li>
+
+                <li class="menu-item {{ request()->routeIs('ahp.kpi-umum.index') ? 'active' : '' }}">
+                    <a href="{{ route('ahp.kpi-umum.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-analyse"></i>
+                        <div data-i18n="Analytics">Pembobotan</div>
+                    </a>
+                </li>
+
+                <li class="menu-item {{ request()->routeIs('realisasi-kpi-umum.index') ? 'active' : '' }}">
+                    <a href="{{ route('realisasi-kpi-umum.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-task"></i>
+                        <div data-i18n="Analytics">Realisasi</div>
+                    </a>
+                </li>
+            @endif
+        @endauth
+
+        @auth
+            @if (auth()->user()->role === 'leader')
+                <li class="menu-item {{ request()->routeIs('dashboard.leader') ? 'active' : '' }}">
+                    <a href="{{ route('dashboard.leader') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-home-circle"></i>
+                        <div data-i18n="Analytics">Dashboard</div>
+                    </a>
+                </li>
+
+                <li class="menu-header small text-uppercase">
+                    <span class="menu-header-text">KPI Umum</span>
+                </li>
+
+                <li class="menu-item {{ request()->routeIs('realisasi-kpi-umum.index') ? 'active' : '' }}">
+                    <a href="{{ route('realisasi-kpi-umum.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-task"></i>
+                        <div data-i18n="Analytics">Realisasi</div>
                     </a>
                 </li>
             @endif

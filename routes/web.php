@@ -6,6 +6,8 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\KpiUmumController;
+use App\Http\Controllers\AhpKpiUmumController;
+use App\Http\Controllers\KpiUmumRealizationController;
 
 Route::middleware('guest')->group(function () {
     Route::get('/', [AuthController::class, 'showLoginForm'])->name('login');
@@ -39,4 +41,30 @@ Route::middleware(['auth','role:hr'])->group(function () {
     Route::post('kpi-umum', [KpiUmumController::class, 'store'])->name('kpi-umum.store');
     Route::put('kpi-umum/{kpi}', [KpiUmumController::class, 'update'])->name('kpi-umum.update');
     Route::delete('kpi-umum/{kpi}', [KpiUmumController::class, 'destroy'])->name('kpi-umum.destroy');
+});
+
+Route::middleware(['auth','role:hr'])->group(function () {
+    Route::get('/ahp/kpi-umum', [AhpKpiUmumController::class, 'index'])->name('ahp.kpi-umum.index');
+    Route::post('/ahp/kpi-umum/hitung', [AhpKpiUmumController::class, 'hitung'])->name('ahp.kpi-umum.hitung');
+});
+
+Route::middleware(['auth','role:owner,hr,leader,karyawan'])->group(function () {
+    Route::get('realisasi-kpi-umum', [KpiUmumRealizationController::class,'index'])->name('realisasi-kpi-umum.index');
+    Route::get('realisasi-kpi-umum/{user}/create', [KpiUmumRealizationController::class,'create'])
+        ->middleware('role:leader') // leader input
+        ->name('realisasi-kpi-umum.create');
+    Route::post('realisasi-kpi-umum/{user}', [KpiUmumRealizationController::class,'store'])
+        ->middleware('role:leader')
+        ->name('realisasi-kpi-umum.store');
+
+    Route::get('realisasi-kpi-umum/{realization}', [KpiUmumRealizationController::class,'show'])
+        ->name('realisasi-kpi-umum.show');
+
+    Route::post('realisasi-kpi-umum/{realization}/approve', [KpiUmumRealizationController::class,'approve'])
+        ->middleware('role:hr')
+        ->name('realisasi-kpi-umum.approve');
+
+    Route::post('realisasi-kpi-umum/{realization}/reject', [KpiUmumRealizationController::class,'reject'])
+        ->middleware('role:hr')
+        ->name('realisasi-kpi-umum.reject');
 });
