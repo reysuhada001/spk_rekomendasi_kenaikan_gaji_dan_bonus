@@ -8,6 +8,12 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\KpiUmumController;
 use App\Http\Controllers\AhpKpiUmumController;
 use App\Http\Controllers\KpiUmumRealizationController;
+use App\Http\Controllers\KpiDivisiController;
+use App\Http\Controllers\AhpKpiDivisiController;
+use App\Http\Controllers\KpiDivisiDistributionController;
+use App\Http\Controllers\KpiDivisiKualitatifRealizationController;
+use App\Http\Controllers\KpiDivisiKuantitatifRealizationController;
+use App\Http\Controllers\KpiDivisiResponseRealizationController;
 
 Route::middleware('guest')->group(function () {
     Route::get('/', [AuthController::class, 'showLoginForm'])->name('login');
@@ -67,4 +73,110 @@ Route::middleware(['auth','role:owner,hr,leader,karyawan'])->group(function () {
     Route::post('realisasi-kpi-umum/{realization}/reject', [KpiUmumRealizationController::class,'reject'])
         ->middleware('role:hr')
         ->name('realisasi-kpi-umum.reject');
+});
+
+Route::middleware(['auth','role:owner,hr,leader'])->group(function () {
+    Route::get('kpi-divisi', [KpiDivisiController::class,'index'])->name('kpi-divisi.index');
+});
+
+Route::middleware(['auth','role:hr'])->group(function () {
+    Route::post('kpi-divisi', [KpiDivisiController::class,'store'])->name('kpi-divisi.store');
+    Route::put('kpi-divisi/{kpiDivisi}', [KpiDivisiController::class,'update'])->name('kpi-divisi.update');
+    Route::delete('kpi-divisi/{kpiDivisi}', [KpiDivisiController::class,'destroy'])->name('kpi-divisi.destroy');
+});
+
+Route::middleware(['auth','role:hr'])->group(function () {
+    Route::get('/ahp/kpi-divisi', [AhpKpiDivisiController::class, 'index'])->name('ahp.kpi-divisi.index');
+    Route::post('/ahp/kpi-divisi/hitung', [AhpKpiDivisiController::class, 'hitung'])->name('ahp.kpi-divisi.hitung');
+});
+
+Route::middleware(['auth'])->group(function () {
+    // INDEX: daftar KPI kuantitatif per (divisi, bulan, tahun)
+    Route::get('distribusi-kpi-divisi', [KpiDivisiDistributionController::class,'index'])
+        ->name('distribusi-kpi-divisi.index');
+
+    // LEADER: input distribusi untuk SATU KPI (pakai ?kpi_id=)
+    Route::middleware('role:leader')->group(function () {
+        Route::get('distribusi-kpi-divisi/create', [KpiDivisiDistributionController::class,'create'])
+            ->name('distribusi-kpi-divisi.create');   // ?kpi_id=
+        Route::post('distribusi-kpi-divisi/store', [KpiDivisiDistributionController::class,'store'])
+            ->name('distribusi-kpi-divisi.store');    // body: kpi_id, alloc[]
+    });
+
+    // DETAIL per KPI (pakai ?distribution_id=&kpi_id=)
+    Route::get('distribusi-kpi-divisi/show', [KpiDivisiDistributionController::class,'show'])
+        ->name('distribusi-kpi-divisi.show');         // ?distribution_id=&kpi_id=
+
+    // HR: ACC / Tolak distribusi (untuk seluruh periode/divisi)
+    Route::middleware('role:hr')->group(function () {
+        Route::post('distribusi-kpi-divisi/{distribution}/approve', [KpiDivisiDistributionController::class,'approve'])
+            ->name('distribusi-kpi-divisi.approve');
+        Route::post('distribusi-kpi-divisi/{distribution}/reject', [KpiDivisiDistributionController::class,'reject'])
+            ->name('distribusi-kpi-divisi.reject');
+    });
+});
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('realisasi-kpi-divisi-kuantitatif', [KpiDivisiKuantitatifRealizationController::class,'index'])
+        ->name('realisasi-kpi-divisi-kuantitatif.index');
+
+    // Leader input
+    Route::middleware('role:leader')->group(function () {
+        Route::get('realisasi-kpi-divisi-kuantitatif/create', [KpiDivisiKuantitatifRealizationController::class,'create'])
+            ->name('realisasi-kpi-divisi-kuantitatif.create');
+        Route::post('realisasi-kpi-divisi-kuantitatif/store', [KpiDivisiKuantitatifRealizationController::class,'store'])
+            ->name('realisasi-kpi-divisi-kuantitatif.store');
+    });
+
+    // Detail & HR verif
+    Route::get('realisasi-kpi-divisi-kuantitatif/{id}', [KpiDivisiKuantitatifRealizationController::class,'show'])
+        ->name('realisasi-kpi-divisi-kuantitatif.show');
+
+    Route::middleware('role:hr')->group(function () {
+        Route::post('realisasi-kpi-divisi-kuantitatif/{id}/approve', [KpiDivisiKuantitatifRealizationController::class,'approve'])
+            ->name('realisasi-kpi-divisi-kuantitatif.approve');
+        Route::post('realisasi-kpi-divisi-kuantitatif/{id}/reject', [KpiDivisiKuantitatifRealizationController::class,'reject'])
+            ->name('realisasi-kpi-divisi-kuantitatif.reject');
+    });
+});
+
+Route::middleware(['auth'])->group(function () {
+
+    Route::get('/realisasi-kpi-divisi-kualitatif', [KpiDivisiKualitatifRealizationController::class, 'index'])
+        ->name('realisasi-kpi-divisi-kualitatif.index');
+
+    Route::get('/realisasi-kpi-divisi-kualitatif/create', [KpiDivisiKualitatifRealizationController::class, 'create'])
+        ->name('realisasi-kpi-divisi-kualitatif.create');
+
+    Route::post('/realisasi-kpi-divisi-kualitatif', [KpiDivisiKualitatifRealizationController::class, 'store'])
+        ->name('realisasi-kpi-divisi-kualitatif.store');
+
+    Route::get('/realisasi-kpi-divisi-kualitatif/{id}', [KpiDivisiKualitatifRealizationController::class, 'show'])
+        ->name('realisasi-kpi-divisi-kualitatif.show');
+
+    Route::post('/realisasi-kpi-divisi-kualitatif/{id}/approve', [KpiDivisiKualitatifRealizationController::class, 'approve'])
+        ->name('realisasi-kpi-divisi-kualitatif.approve');
+
+    Route::post('/realisasi-kpi-divisi-kualitatif/{id}/reject', [KpiDivisiKualitatifRealizationController::class, 'reject'])
+        ->name('realisasi-kpi-divisi-kualitatif.reject');
+});
+
+Route::middleware(['auth'])->group(function () {
+
+    Route::get('/realisasi-kpi-divisi-response', [KpiDivisiResponseRealizationController::class, 'index'])
+        ->name('realisasi-kpi-divisi-response.index');
+
+    Route::get('/realisasi-kpi-divisi-response/create', [KpiDivisiResponseRealizationController::class, 'create'])
+        ->name('realisasi-kpi-divisi-response.create');
+    Route::post('/realisasi-kpi-divisi-response', [KpiDivisiResponseRealizationController::class, 'store'])
+        ->name('realisasi-kpi-divisi-response.store');
+
+    Route::get('/realisasi-kpi-divisi-response/{id}', [KpiDivisiResponseRealizationController::class, 'show'])
+        ->name('realisasi-kpi-divisi-response.show');
+
+    Route::post('/realisasi-kpi-divisi-response/{id}/approve', [KpiDivisiResponseRealizationController::class, 'approve'])
+        ->name('realisasi-kpi-divisi-response.approve');
+
+    Route::post('/realisasi-kpi-divisi-response/{id}/reject', [KpiDivisiResponseRealizationController::class, 'reject'])
+        ->name('realisasi-kpi-divisi-response.reject');
 });
