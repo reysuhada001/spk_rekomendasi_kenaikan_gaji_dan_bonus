@@ -6,12 +6,17 @@ use Illuminate\Database\Eloquent\Model;
 
 class KpiDivisiKuantitatifRealizationItem extends Model
 {
-    protected $table = 'kpi_divisi_kuantitatif_realization_items';
-
+    // Izinkan mass assignment termasuk user_id
     protected $fillable = [
-        'realization_id','kpi_divisi_id','target','realization','score'
+        'realization_id',
+        'user_id',
+        'kpi_divisi_id',
+        'target',
+        'realization',
+        'score',
     ];
 
+    // Relasi opsional
     public function realization()
     {
         return $this->belongsTo(KpiDivisiKuantitatifRealization::class, 'realization_id');
@@ -20,5 +25,10 @@ class KpiDivisiKuantitatifRealizationItem extends Model
     public function kpi()
     {
         return $this->belongsTo(KpiDivisi::class, 'kpi_divisi_id');
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

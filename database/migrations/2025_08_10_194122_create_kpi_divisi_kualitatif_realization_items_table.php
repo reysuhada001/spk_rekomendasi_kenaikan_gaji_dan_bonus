@@ -9,7 +9,12 @@ return new class extends Migration {
     {
         Schema::create('kpi_divisi_kualitatif_realization_items', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('realization_id');
+            $table->foreignId('realization_id')
+                ->constrained('kpi_divisi_kualitatif_realizations')
+                ->cascadeOnDelete();
+            $table->foreignId('user_id')
+                ->constrained('users')
+                ->cascadeOnDelete();
             $table->unsignedBigInteger('kpi_divisi_id');     // KPI bertipe kualitatif
             $table->decimal('target', 14, 4)->default(0);     // copy dari kpi_divisi.target
             $table->decimal('realization', 14, 4)->default(0);

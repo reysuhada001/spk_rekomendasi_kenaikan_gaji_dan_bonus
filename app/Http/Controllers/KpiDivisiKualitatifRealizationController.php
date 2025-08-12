@@ -18,24 +18,22 @@ class KpiDivisiKualitatifRealizationController extends Controller
         7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'
     ];
 
-    /** INDEX: daftar karyawan sesuai role + status realisasi */
     public function index(Request $request)
     {
         $me = Auth::user();
-        $perPage = (int) $request->input('per_page', 10);
+        $perPage = (int)$request->input('per_page', 10);
         $search  = $request->input('search', '');
 
         $bulan = $request->filled('bulan') ? (int)$request->bulan : null;
         $tahun = $request->filled('tahun') ? (int)$request->tahun : null;
-        $division_id = $request->filled('division_id') ? (int)$request->division_id : null;
 
+        $division_id = $request->filled('division_id') ? (int)$request->division_id : null;
         if ($me->role === 'leader' || $me->role === 'karyawan') {
             $division_id = $me->division_id;
         }
 
         $divisions = Division::orderBy('name')->get();
 
-        // jika belum pilih periode/divisi (untuk HR/Owner) ⇒ kosong
         $needDivForAdmin = in_array($me->role, ['owner','hr'], true) && empty($division_id);
         if (is_null($bulan) || is_null($tahun) || $needDivForAdmin) {
             $users = User::whereRaw('1=0')->paginate($perPage);
@@ -47,8 +45,8 @@ class KpiDivisiKualitatifRealizationController extends Controller
         }
 
         $usersQ = User::with('division')
-            ->when($search, function ($q) use ($search) {
-                $q->where(function ($qq) use ($search) {
+            ->when($search, function($q) use ($search) {
+                $q->where(function($qq) use ($search){
                     $qq->where('full_name','like',"%{$search}%")
                        ->orWhere('nik','like',"%{$search}%")
                        ->orWhere('email','like',"%{$search}%")
@@ -56,20 +54,14 @@ class KpiDivisiKualitatifRealizationController extends Controller
                 });
             });
 
-        if ($me->role === 'leader') {
-            $usersQ->where('division_id', $me->division_id);
-        } elseif ($me->role === 'karyawan') {
-            $usersQ->where('id', $me->id);
-        } elseif (in_array($me->role, ['owner','hr'], true)) {
-            if (!empty($division_id)) $usersQ->where('division_id', $division_id);
-        }
+        if ($me->role === 'leader')      $usersQ->where('division_id', $me->division_id);
+        elseif ($me->role === 'karyawan') $usersQ->where('id', $me->id);
+        elseif (in_array($me->role,['owner','hr'],true) && !empty($division_id)) $usersQ->where('division_id',$division_id);
 
-        // hanya karyawan
-        $usersQ->where('role', 'karyawan');
+        $usersQ->where('role','karyawan');
 
         $users = $usersQ->orderBy('full_name')->paginate($perPage)->appends($request->all());
 
-        // ambil realisasi header by user
         $realByUser = KpiDivisiKualitatifRealization::where('bulan',$bulan)
             ->where('tahun',$tahun)
             ->whereIn('user_id', $users->pluck('id'))
@@ -82,7 +74,6 @@ class KpiDivisiKualitatifRealizationController extends Controller
         ]);
     }
 
-    /** CREATE: Leader input realisasi untuk seorang karyawan di periode tsb */
     public function create(Request $request)
     {
         $me = Auth::user();
@@ -94,18 +85,17 @@ class KpiDivisiKualitatifRealizationController extends Controller
             'tahun'   => 'required|integer|min:2000|max:2100',
         ]);
 
-        $user  = User::findOrFail((int)$request->user_id);
+        $user = User::findOrFail((int)$request->user_id);
         abort_unless($user->division_id === $me->division_id, 403);
         abort_unless($user->role === 'karyawan', 403);
 
         $bulan = (int)$request->bulan;
         $tahun = (int)$request->tahun;
 
-        // KPI kualitatif periode ini
+        // KPI kualitatif periode ini (target sama untuk semua karyawan)
         $kpis = KpiDivisi::where('division_id',$user->division_id)
             ->where('bulan',$bulan)->where('tahun',$tahun)
-            ->where('tipe','kualitatif')
-            ->orderBy('nama')->get();
+            ->where('tipe','kualitatif')->orderBy('nama')->get();
 
         if ($kpis->isEmpty()) {
             return redirect()->route('realisasi-kpi-divisi-kualitatif.index', [
@@ -113,10 +103,8 @@ class KpiDivisiKualitatifRealizationController extends Controller
             ])->with('error','Tidak ada KPI Divisi bertipe kualitatif pada periode ini.');
         }
 
-        // Existing (jika ajukan ulang)
         $real = KpiDivisiKualitatifRealization::where([
-            'user_id'=>$user->id,'division_id'=>$user->division_id,
-            'bulan'=>$bulan,'tahun'=>$tahun
+            'user_id'=>$user->id,'division_id'=>$user->division_id,'bulan'=>$bulan,'tahun'=>$tahun
         ])->first();
 
         $existing = [];
@@ -136,7 +124,6 @@ class KpiDivisiKualitatifRealizationController extends Controller
         ]);
     }
 
-    /** STORE: simpan pengajuan realisasi (leader) */
     public function store(Request $request)
     {
         $me = Auth::user();
@@ -155,7 +142,6 @@ class KpiDivisiKualitatifRealizationController extends Controller
 
         $bulan = (int)$data['bulan']; $tahun = (int)$data['tahun'];
 
-        // KPI kualitatif periode tsb
         $kpis = KpiDivisi::where('division_id',$user->division_id)
             ->where('bulan',$bulan)->where('tahun',$tahun)
             ->where('tipe','kualitatif')->orderBy('nama')->get();
@@ -164,11 +150,10 @@ class KpiDivisiKualitatifRealizationController extends Controller
             return back()->with('error','Tidak ada KPI kualitatif pada periode ini.')->withInput();
         }
 
-        // siapkan baris item (target = target KPI)
         $rows = [];
         foreach ($kpis as $k) {
             $kpiId = $k->id;
-            $target = (float)($k->target ?? 0);
+            $target = (float)$k->target;            // target sama untuk semua
             $realz  = isset($data['real'][$kpiId]) ? (float)$data['real'][$kpiId] : 0;
             $score  = $this->scoreKualitatif($realz, $target);
 
@@ -184,7 +169,7 @@ class KpiDivisiKualitatifRealizationController extends Controller
             $real = KpiDivisiKualitatifRealization::updateOrCreate(
                 ['user_id'=>$user->id,'division_id'=>$user->division_id,'bulan'=>$bulan,'tahun'=>$tahun],
                 [
-                    'status'=>'submitted',     // keluar dari stale/rejected
+                    'status'=>'submitted',
                     'hr_note'=>null,
                     'created_by'=>$me->id,
                     'updated_by'=>$me->id,
@@ -197,6 +182,7 @@ class KpiDivisiKualitatifRealizationController extends Controller
             foreach ($rows as $r) {
                 KpiDivisiKualitatifRealizationItem::create([
                     'realization_id'=>$real->id,
+                    'user_id'       =>$user->id, // << WAJIB
                     'kpi_divisi_id' =>$r['kpi_divisi_id'],
                     'target'        =>$r['target'],
                     'realization'   =>$r['realization'],
@@ -212,7 +198,6 @@ class KpiDivisiKualitatifRealizationController extends Controller
         ])->with('success','Realisasi diajukan. Menunggu verifikasi HR.');
     }
 
-    /** SHOW: detail pengajuan/hasil satu karyawan */
     public function show($id)
     {
         $me = Auth::user();
@@ -223,7 +208,6 @@ class KpiDivisiKualitatifRealizationController extends Controller
 
         $items = KpiDivisiKualitatifRealizationItem::where('realization_id',$real->id)->with('kpi')->get();
 
-        // hitung total skor jika bobot AHP tersedia
         $kpiIds = $items->pluck('kpi_divisi_id');
         $kpis   = KpiDivisi::whereIn('id',$kpiIds)->get()->keyBy('id');
 
@@ -242,19 +226,14 @@ class KpiDivisiKualitatifRealizationController extends Controller
         ]);
     }
 
-    /** HR Approve */
     public function approve($id)
     {
         $me = Auth::user();
         abort_unless($me->role === 'hr', 403);
 
         $real = KpiDivisiKualitatifRealization::findOrFail($id);
-        if ($real->status === 'approved') {
-            return back()->with('success','Realisasi sudah disetujui.');
-        }
-        if ($real->status === 'stale') {
-            return back()->with('error','Realisasi berstatus stale. Leader harus input ulang.');
-        }
+        if ($real->status === 'approved') return back()->with('success','Realisasi sudah disetujui.');
+        if ($real->status === 'stale')    return back()->with('error','Realisasi stale. Leader harus input ulang.');
 
         $items = KpiDivisiKualitatifRealizationItem::where('realization_id',$real->id)->get();
         $kpis  = KpiDivisi::whereIn('id', $items->pluck('kpi_divisi_id'))->get()->keyBy('id');
@@ -269,16 +248,10 @@ class KpiDivisiKualitatifRealizationController extends Controller
             $total = round($sumWS, 2);
         }
 
-        $real->update([
-            'status' => 'approved',
-            'hr_note'=> null,
-            'total_score' => $total
-        ]);
-
+        $real->update(['status'=>'approved','hr_note'=>null,'total_score'=>$total]);
         return back()->with('success','Realisasi disetujui.');
     }
 
-    /** HR Reject */
     public function reject(Request $request, $id)
     {
         $me = Auth::user();
@@ -291,38 +264,30 @@ class KpiDivisiKualitatifRealizationController extends Controller
         return back()->with('success','Realisasi ditolak.');
     }
 
-    // ====== SCORING (lebih besar lebih baik, sama pola dgn kuantitatif) ======
-    private function scoreKualitatif(float $realisasi, float $target): float
+    private function scoreKualitatif(float $real, float $target): float
     {
-        if ($target <= 0) {
-            return $realisasi > 0 ? 150.0 : 0.0; // edge-case
-        }
-        if ($realisasi >= $target) {
-            return round(100.0 * ($realisasi / $target), 2);
-        }
-        $ratio = max(0.0, min(1.0, $realisasi / $target));
-        $score = $this->fuzzyBelowTargetScore($ratio);
-        return round($score, 2);
+        if ($target <= 0) return $real > 0 ? 150.0 : 0.0;
+        if ($real >= $target) return min(200.0, round(100.0 * ($real / $target), 2));
+        $ratio = max(0.0, min(1.0, $real / $target));
+        return round($this->fuzzyBelowTarget($ratio), 2);
     }
 
-    private function fuzzyBelowTargetScore(float $x): float
+    private function fuzzyBelowTarget(float $x): float
     {
-        // low/medium/high triangular-like, sama dengan kuantitatif untuk konsistensi
         $muL = 0.0; $muM = 0.0; $muH = 0.0;
 
-        if ($x <= 0.3)      $muL = ($x - 0.0) / (0.3 - 0.0 + 1e-9);
-        elseif ($x <= 0.6)  $muL = (0.6 - $x) / (0.6 - 0.3 + 1e-9);
-        else                $muL = 0.0;
+        if     ($x <= 0.3) $muL = ($x - 0.0) / (0.3 - 0.0 + 1e-9);
+        elseif ($x <= 0.6) $muL = (0.6 - $x) / (0.6 - 0.3 + 1e-9);
         $muL = max(0.0, min(1.0, $muL));
 
-        if ($x <= 0.4)      $muM = 0.0;
-        elseif ($x <= 0.7)  $muM = ($x - 0.4) / (0.7 - 0.4 + 1e-9);
-        else                $muM = (1.0 - $x) / (1.0 - 0.7 + 1e-9);
+        if     ($x <= 0.4) $muM = 0.0;
+        elseif ($x <= 0.7) $muM = ($x - 0.4) / (0.7 - 0.4 + 1e-9);
+        else               $muM = (1.0 - $x) / (1.0 - 0.7 + 1e-9);
         $muM = max(0.0, min(1.0, $muM));
 
-        if ($x <= 0.6)      $muH = 0.0;
-        elseif ($x <= 0.9)  $muH = ($x - 0.6) / (0.9 - 0.6 + 1e-9);
-        else                $muH = (1.0 - $x) / (1.0 - 0.9 + 1e-9);
+        if     ($x <= 0.6) $muH = 0.0;
+        elseif ($x <= 0.9) $muH = ($x - 0.6) / (0.9 - 0.6 + 1e-9);
+        else               $muH = (1.0 - $x) / (1.0 - 0.9 + 1e-9);
         $muH = max(0.0, min(1.0, $muH));
 
         $wL = 50; $wM = 80; $wH = 95;

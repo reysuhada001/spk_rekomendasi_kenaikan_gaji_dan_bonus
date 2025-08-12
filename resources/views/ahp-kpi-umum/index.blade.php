@@ -4,14 +4,17 @@
     <div class="container py-4">
         <div class="card">
 
-            {{-- Header + Filter --}}
-            <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <h5 class="mb-0">Pembobotan AHP — KPI Umum</h5>
+            {{-- Header --}}
+            <div class="card-header">
+                <h5 class="mb-2">Pembobotan AHP — KPI Umum</h5>
 
-                {{-- Filter Bulan & Tahun --}}
-                <form method="GET" action="{{ route('ahp.kpi-umum.index') }}" class="d-flex align-items-center gap-2">
-                    <div class="input-group input-group-sm" style="width: 170px;">
-                        <span class="input-group-text">Bulan</span>
+                {{-- Filter di bawah heading --}}
+                <form method="GET" action="{{ route('ahp.kpi-umum.index') }}"
+                    class="d-flex align-items-center flex-wrap gap-2">
+                    <div class="input-group input-group-sm" style="width: 200px;">
+                        <span class="input-group-text">
+                            <i class="bx bx-calendar"></i>&nbsp;Bulan
+                        </span>
                         <select name="bulan" class="form-select">
                             <option value="" {{ is_null($bulan) ? 'selected' : '' }}>Pilih Bulan</option>
                             @foreach ($bulanList as $num => $label)
@@ -23,22 +26,21 @@
                         </select>
                     </div>
 
-                    <div class="input-group input-group-sm" style="width: 170px;">
-                        <span class="input-group-text">Tahun</span>
-                        <select name="tahun" class="form-select">
-                            <option value="" {{ is_null($tahun) ? 'selected' : '' }}>Pilih Tahun</option>
-                            @foreach ($tahunList as $th)
-                                <option value="{{ $th }}"
-                                    {{ (string) $tahun === (string) $th ? 'selected' : '' }}>
-                                    {{ $th }}
-                                </option>
-                            @endforeach
-                        </select>
+                    <div class="input-group input-group-sm" style="width: 180px;">
+                        <span class="input-group-text">
+                            <i class="bx bx-calendar-event"></i>&nbsp;Tahun
+                        </span>
+                        <input type="number" name="tahun" class="form-control" placeholder="YYYY"
+                            min="{{ date('Y') - 5 }}" max="{{ date('Y') + 5 }}" value="{{ $tahun ?? '' }}">
                     </div>
 
                     <button class="btn btn-secondary btn-sm" type="submit">
                         <i class="bx bx-filter-alt me-1"></i> Filter
                     </button>
+
+                    <a href="{{ route('ahp.kpi-umum.index') }}" class="btn btn-light btn-sm">
+                        <i class="bx bx-reset me-1"></i> Reset
+                    </a>
                 </form>
             </div>
 
@@ -73,7 +75,7 @@
                                         <tr>
                                             <td class="fw-semibold">{{ $k1->nama }}</td>
                                             <td class="text-center">
-                                                <select class="form-select form-select-sm" style="min-width: 120px;"
+                                                <select class="form-select form-select-sm" style="min-width: 140px;"
                                                     name="pair_{{ $k1->id }}_{{ $k2->id }}" required>
                                                     @foreach ($saatyOptions as $val => $label)
                                                         <option value="{{ $val }}">{{ $label }}</option>
@@ -89,7 +91,7 @@
 
                         <div class="d-flex justify-content-end mt-3">
                             <button type="submit" class="btn btn-primary">
-                                <i class="bx bx-calculator me-1"></i> Hitung    
+                                <i class="bx bx-calculator me-1"></i> Hitung
                             </button>
                         </div>
                     </form>

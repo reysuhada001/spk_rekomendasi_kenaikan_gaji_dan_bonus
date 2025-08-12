@@ -48,7 +48,8 @@
                     <div class="small text-muted">
                         Total alokasi: <strong>{{ rtrim(rtrim(number_format($sum, 2, '.', ''), '0'), '.') }}
                             {{ $kpi->satuan }}</strong>
-                        &nbsp;|&nbsp; Target KPI: <strong>{{ rtrim(rtrim(number_format($kpi->target, 2, '.', ''), '0'), '.') }}
+                        &nbsp;|&nbsp; Target KPI:
+                        <strong>{{ rtrim(rtrim(number_format($kpi->target, 2, '.', ''), '0'), '.') }}
                             {{ $kpi->satuan }}</strong>
                     </div>
 

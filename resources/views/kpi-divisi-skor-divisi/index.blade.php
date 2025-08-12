@@ -1,0 +1,191 @@
+@extends('layouts.app')
+
+@section('content')
+    <div class="container py-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-2">Skor KPI Divisi — Rekap Per Divisi</h5>
+
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    {{-- Per Page --}}
+                    <form method="GET" action="{{ route('kpi-divisi.skor-divisi.index') }}"
+                        class="d-flex align-items-center gap-2">
+                        <label class="small text-muted mb-0">Show</label>
+                        <div class="input-group input-group-sm" style="width: 110px;">
+                            <select name="per_page" class="form-select" onchange="this.form.submit()">
+                                @foreach ([10, 25, 50, 75, 100] as $pp)
+                                    <option value="{{ $pp }}" {{ (int) $perPage === $pp ? 'selected' : '' }}>
+                                        {{ $pp }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <span class="small text-muted">entries</span>
+
+                        {{-- persist current filters --}}
+                        <input type="hidden" name="bulan" value="{{ $bulan }}">
+                        <input type="hidden" name="tahun" value="{{ $tahun }}">
+                        @if (in_array($me->role, ['owner', 'hr'], true))
+                            <input type="hidden" name="division_id" value="{{ $division_id }}">
+                        @endif
+                        <input type="hidden" name="search" value="{{ $search ?? '' }}">
+                    </form>
+
+                    {{-- Filter --}}
+                    <form method="GET" action="{{ route('kpi-divisi.skor-divisi.index') }}"
+                        class="d-flex align-items-center ms-auto flex-wrap gap-2">
+                        <input type="hidden" name="per_page" value="{{ $perPage }}">
+
+                        <div class="input-group input-group-sm" style="width: 200px;">
+                            <span class="input-group-text"><i class="bx bx-calendar"></i>&nbsp;Bulan</span>
+                            <select name="bulan" class="form-select">
+                                <option value="" {{ is_null($bulan) ? 'selected' : '' }}>Pilih Bulan</option>
+                                @foreach ($bulanList as $num => $label)
+                                    <option value="{{ $num }}"
+                                        {{ (string) $bulan === (string) $num ? 'selected' : '' }}>{{ $label }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="input-group input-group-sm" style="width: 180px;">
+                            <span class="input-group-text"><i class="bx bx-calendar-event"></i>&nbsp;Tahun</span>
+                            <input type="number" name="tahun" class="form-control" placeholder="YYYY"
+                                min="{{ date('Y') - 5 }}" max="{{ date('Y') + 5 }}" value="{{ $tahun ?? '' }}">
+                        </div>
+
+                        @if (in_array($me->role, ['owner', 'hr'], true))
+                            <div class="input-group input-group-sm" style="width: 260px;">
+                                <span class="input-group-text"><i class="bx bx-buildings"></i>&nbsp;Divisi</span>
+                                <select name="division_id" class="form-select">
+                                    <option value="" {{ empty($division_id) ? 'selected' : '' }}>Semua Divisi
+                                    </option>
+                                    @foreach ($divisionsAll as $d)
+                                        <option value="{{ $d->id }}"
+                                            {{ (string) $division_id === (string) $d->id ? 'selected' : '' }}>
+                                            {{ $d->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="input-group input-group-sm" style="width: 260px;">
+                                <span class="input-group-text"><i class="bx bx-search"></i></span>
+                                <input type="text" name="search" class="form-control" placeholder="Cari divisi..."
+                                    value="{{ $search ?? '' }}">
+                            </div>
+                        @endif
+
+                        <button class="btn btn-secondary btn-sm" type="submit">
+                            <i class="bx bx-filter-alt me-1"></i> Filter
+                        </button>
+                        <a href="{{ route('kpi-divisi.skor-divisi.index', ['per_page' => $perPage]) }}"
+                            class="btn btn-light btn-sm">
+                            <i class="bx bx-reset me-1"></i> Reset
+                        </a>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card-body">
+                <div class="table-responsive" style="white-space: nowrap; overflow:auto; max-height:65vh;">
+                    <table class="table-hover table align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width:60px">#</th>
+                                <th>DIVISI</th>
+                                <th>BULAN</th>
+                                <th>TAHUN</th>
+                                <th class="text-end">KUANTITATIF</th>
+                                <th class="text-end">KUALITATIF</th>
+                                <th class="text-end">RESPONSE</th>
+                                <th class="text-end">PERSENTASE</th>
+                                <th class="text-end">SKOR KPI DIVISI</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @php $fmt = fn($v)=> $v!==null ? rtrim(rtrim(number_format($v,2,'.',''),'0'),'.').'%' : '-'; @endphp
+
+                            @if (is_null($bulan) || is_null($tahun))
+                                <tr>
+                                    <td colspan="9" class="text-muted py-4 text-center">Silakan pilih Bulan & Tahun
+                                        terlebih dahulu.</td>
+                                </tr>
+                            @else
+                                @forelse ($divisions as $i => $d)
+                                    @php $row = $rows[$d->id] ?? null; @endphp
+                                    <tr>
+                                        <td>{{ ($divisions->currentPage() - 1) * $divisions->perPage() + $i + 1 }}</td>
+                                        <td class="fw-semibold">{{ $d->name }}</td>
+                                        <td>{{ $bulan ? $bulanList[$bulan] ?? $bulan : '-' }}</td>
+                                        <td>{{ $tahun ?? '-' }}</td>
+                                        <td class="text-end">{{ $row ? $fmt($row['q']) : '-' }}</td>
+                                        <td class="text-end">{{ $row ? $fmt($row['k']) : '-' }}</td>
+                                        <td class="text-end">{{ $row ? $fmt($row['r']) : '-' }}</td>
+                                        <td class="text-end">{{ $row ? $fmt($row['p']) : '-' }}</td>
+                                        <td class="text-end">{{ $row ? $fmt($row['total']) : '-' }}</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="9" class="text-muted py-4 text-center">Tidak ada data.</td>
+                                    </tr>
+                                @endforelse
+                            @endif
+                        </tbody>
+                    </table>
+                </div>
+
+                @php
+                    $from = !is_null($bulan) && !is_null($tahun) && $divisions->count() ? $divisions->firstItem() : 0;
+                    $to = !is_null($bulan) && !is_null($tahun) && $divisions->count() ? $divisions->lastItem() : 0;
+                    $tot = !is_null($bulan) && !is_null($tahun) ? $divisions->total() : 0;
+                @endphp
+                <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+                    <small class="text-muted">Showing {{ $from }} to {{ $to }} of {{ $tot }}
+                        entries</small>
+                    @if (!is_null($bulan) && !is_null($tahun) && $divisions->hasPages())
+                        {{ $divisions->onEachSide(1)->links() }}
+                    @else
+                        <nav>
+                            <ul class="pagination mb-0">
+                                <li class="page-item active"><span class="page-link">1</span></li>
+                            </ul>
+                        </nav>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+@endsection
+
+@push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'bottom-end',
+            showConfirmButton: false,
+            timer: 2500,
+            timerProgressBar: true
+        });
+        @if (session('success'))
+            Toast.fire({
+                icon: 'success',
+                title: @json(session('success'))
+            });
+        @endif
+        @if (session('error'))
+            Toast.fire({
+                icon: 'error',
+                title: @json(session('error'))
+            });
+        @endif
+        @if ($errors->any())
+            @foreach ($errors->take(3) as $err)
+                Toast.fire({
+                    icon: 'error',
+                    title: @json($err)
+                });
+            @endforeach
+        @endif
+    </script>
+@endpush

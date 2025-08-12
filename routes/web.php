@@ -13,7 +13,19 @@ use App\Http\Controllers\AhpKpiDivisiController;
 use App\Http\Controllers\KpiDivisiDistributionController;
 use App\Http\Controllers\KpiDivisiKualitatifRealizationController;
 use App\Http\Controllers\KpiDivisiKuantitatifRealizationController;
+use App\Http\Controllers\KpiDivisiPersentaseRealizationController;
 use App\Http\Controllers\KpiDivisiResponseRealizationController;
+use App\Http\Controllers\KpiDivisiSkorKaryawanController;
+use App\Http\Controllers\KpiDivisiSkorDivisiController;
+use App\Http\Controllers\AspekController;
+use App\Http\Controllers\PeerAssessmentController;
+use App\Http\Controllers\PeerAssessmentAdminController;
+use App\Http\Controllers\AhpGlobalController;
+use App\Http\Controllers\BonusRecommendationController;
+use App\Http\Controllers\SalaryRaiseRecommendationController;
+use App\Http\Controllers\LeaderboardMonthlyController;
+use App\Http\Controllers\LeaderboardDivisionController; 
+use App\Http\Controllers\LeaderboardDivisionKpiController;  
 
 Route::middleware('guest')->group(function () {
     Route::get('/', [AuthController::class, 'showLoginForm'])->name('login');
@@ -179,4 +191,87 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/realisasi-kpi-divisi-response/{id}/reject', [KpiDivisiResponseRealizationController::class, 'reject'])
         ->name('realisasi-kpi-divisi-response.reject');
+});
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/realisasi-kpi-divisi-persentase', [KpiDivisiPersentaseRealizationController::class, 'index'])
+        ->name('realisasi-kpi-divisi-persentase.index');
+
+    Route::get('/realisasi-kpi-divisi-persentase/create', [KpiDivisiPersentaseRealizationController::class, 'create'])
+        ->name('realisasi-kpi-divisi-persentase.create'); 
+
+    Route::post('/realisasi-kpi-divisi-persentase', [KpiDivisiPersentaseRealizationController::class, 'store'])
+        ->name('realisasi-kpi-divisi-persentase.store');
+
+    Route::get('/realisasi-kpi-divisi-persentase/{id}', [KpiDivisiPersentaseRealizationController::class, 'show'])
+        ->name('realisasi-kpi-divisi-persentase.show');
+
+    Route::post('/realisasi-kpi-divisi-persentase/{id}/approve', [KpiDivisiPersentaseRealizationController::class, 'approve'])
+        ->name('realisasi-kpi-divisi-persentase.approve');
+
+    Route::post('/realisasi-kpi-divisi-persentase/{id}/reject', [KpiDivisiPersentaseRealizationController::class, 'reject'])
+        ->name('realisasi-kpi-divisi-persentase.reject');
+});
+
+Route::get('/kpi-divisi/skor', [KpiDivisiSkorKaryawanController::class, 'index'])
+    ->middleware(['auth','role:owner,hr,leader,karyawan'])
+    ->name('kpi-divisi.skor-karyawan.index');
+
+Route::middleware(['auth','role:owner,hr,leader'])->group(function () {
+    Route::get('/kpi-divisi/skor-divisi', [KpiDivisiSkorDivisiController::class,'index'])
+        ->name('kpi-divisi.skor-divisi.index');
+});
+
+Route::middleware(['auth','role:owner,hr,leader'])->group(function () {
+    Route::get('aspek', [AspekController::class,'index'])->name('aspek.index');
+});
+
+Route::middleware(['auth','role:hr'])->group(function () {
+    Route::post('aspek', [AspekController::class,'store'])->name('aspek.store');
+    Route::put('aspek/{aspek}', [AspekController::class,'update'])->name('aspek.update');
+    Route::delete('aspek/{aspek}', [AspekController::class,'destroy'])->name('aspek.destroy');
+});
+
+Route::middleware(['auth','role:karyawan'])->group(function () {
+    Route::get('peer', [PeerAssessmentController::class,'index'])->name('peer.index');
+    Route::get('peer/create', [PeerAssessmentController::class,'create'])->name('peer.create'); // ?assessee_id=&bulan=&tahun=
+    Route::post('peer', [PeerAssessmentController::class,'store'])->name('peer.store');
+});
+
+Route::middleware(['auth','role:hr'])->group(function () {
+    Route::get('peer-admin', [PeerAssessmentAdminController::class,'index'])->name('peer.admin.index');
+    Route::get('peer-admin/{user}', [PeerAssessmentAdminController::class,'show'])->name('peer.admin.show'); // ?bulan=&tahun=
+});
+
+Route::middleware(['auth','role:hr'])->group(function () {
+    Route::get('ahp/global', [AhpGlobalController::class,'index'])->name('ahp.global.index');
+});
+
+Route::middleware(['auth','role:hr'])->group(function () {
+    Route::post('ahp/global/hitung', [AhpGlobalController::class,'hitung'])->name('ahp.global.hitung');
+});
+
+Route::middleware(['auth','role:owner,hr,leader,karyawan'])->group(function () {
+    Route::get('bonus-rekomendasi', [BonusRecommendationController::class,'index'])->name('bonus.rekomendasi.index');
+});
+
+Route::middleware(['auth','role:owner,hr,leader,karyawan'])->group(function () {
+    Route::get('kenaikan-gaji/rekomendasi', [SalaryRaiseRecommendationController::class,'index'])
+        ->name('salary.raise.index');
+});
+
+Route::middleware(['auth','role:owner,hr,leader,karyawan'])->group(function () {
+    Route::get('leaderboard/bulanan', [LeaderboardMonthlyController::class, 'index'])
+        ->name('leaderboard.bulanan.index');
+});
+
+
+Route::middleware(['auth','role:owner,hr,leader,karyawan'])->group(function () {
+    Route::get('leaderboard/divisi', [LeaderboardDivisionController::class, 'index'])
+        ->name('leaderboard.divisi.index');
+});
+
+Route::middleware(['auth','role:owner,hr,leader,karyawan'])->group(function () {
+    Route::get('leaderboard/divisi-kpi', [LeaderboardDivisionKpiController::class, 'index'])
+        ->name('leaderboard.divisi-kpi.index');
 });

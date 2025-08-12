@@ -7,6 +7,7 @@
                 <h5 class="mb-2">Realisasi KPI Divisi — Kualitatif</h5>
 
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    {{-- Per Page --}}
                     <form method="GET" action="{{ route('realisasi-kpi-divisi-kualitatif.index') }}"
                         class="d-flex align-items-center gap-2">
                         <input type="hidden" name="bulan" value="{{ $bulan }}">
@@ -14,57 +15,62 @@
                         @if (in_array($me->role, ['owner', 'hr']))
                             <input type="hidden" name="division_id" value="{{ $division_id }}">
                         @endif
+
                         <span class="small text-muted">Show</span>
                         <div class="input-group input-group-sm" style="width: 100px;">
                             <select name="per_page" class="form-select" onchange="this.form.submit()">
                                 @foreach ([10, 25, 50, 75, 100] as $pp)
                                     <option value="{{ $pp }}" {{ (int) $perPage === $pp ? 'selected' : '' }}>
-                                        {{ $pp }}</option>
+                                        {{ $pp }}
+                                    </option>
                                 @endforeach
                             </select>
                         </div>
                         <span class="small text-muted">entries</span>
                     </form>
 
+                    {{-- Filter --}}
                     <form method="GET" action="{{ route('realisasi-kpi-divisi-kualitatif.index') }}"
                         class="d-flex align-items-center ms-auto flex-wrap gap-2">
-                        <div class="input-group input-group-sm" style="width: 170px;">
-                            <span class="input-group-text">Bulan</span>
+                        {{-- Persist per_page saat filter --}}
+                        <input type="hidden" name="per_page" value="{{ $perPage }}">
+
+                        <div class="input-group input-group-sm" style="width: 200px;">
+                            <span class="input-group-text"><i class="bx bx-calendar"></i>&nbsp;Bulan</span>
                             <select name="bulan" class="form-select">
                                 <option value="" {{ is_null($bulan) ? 'selected' : '' }}>Pilih Bulan</option>
                                 @foreach ($bulanList as $num => $label)
                                     <option value="{{ $num }}"
-                                        {{ (string) $bulan === (string) $num ? 'selected' : '' }}>{{ $label }}</option>
+                                        {{ (string) $bulan === (string) $num ? 'selected' : '' }}>
+                                        {{ $label }}
+                                    </option>
                                 @endforeach
                             </select>
                         </div>
-                        <div class="input-group input-group-sm" style="width: 160px;">
-                            <span class="input-group-text">Tahun</span>
-                            <select name="tahun" class="form-select">
-                                <option value="" {{ is_null($tahun) ? 'selected' : '' }}>Pilih Tahun</option>
-                                @for ($y = date('Y') - 5; $y <= date('Y') + 5; $y++)
-                                    <option value="{{ $y }}"
-                                        {{ (string) $tahun === (string) $y ? 'selected' : '' }}>{{ $y }}</option>
-                                @endfor
-                            </select>
+
+                        <div class="input-group input-group-sm" style="width: 180px;">
+                            <span class="input-group-text"><i class="bx bx-calendar-event"></i>&nbsp;Tahun</span>
+                            <input type="number" name="tahun" class="form-control" placeholder="YYYY"
+                                min="{{ date('Y') - 5 }}" max="{{ date('Y') + 5 }}" value="{{ $tahun ?? '' }}">
                         </div>
 
                         @if (in_array($me->role, ['owner', 'hr']))
-                            <div class="input-group input-group-sm" style="width: 220px;">
-                                <span class="input-group-text">Divisi</span>
+                            <div class="input-group input-group-sm" style="width: 240px;">
+                                <span class="input-group-text"><i class="bx bx-buildings"></i>&nbsp;Divisi</span>
                                 <select name="division_id" class="form-select">
                                     <option value="" {{ empty($division_id) ? 'selected' : '' }}>Pilih Divisi
                                     </option>
                                     @foreach ($divisions as $d)
                                         <option value="{{ $d->id }}"
                                             {{ (string) $division_id === (string) $d->id ? 'selected' : '' }}>
-                                            {{ $d->name }}</option>
+                                            {{ $d->name }}
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
                         @endif
 
-                        <div class="input-group input-group-sm" style="width: 200px;">
+                        <div class="input-group input-group-sm" style="width: 260px;">
                             <span class="input-group-text"><i class="bx bx-search"></i></span>
                             <input type="text" name="search" value="{{ $search ?? '' }}" class="form-control"
                                 placeholder="Cari karyawan...">
@@ -73,6 +79,11 @@
                         <button class="btn btn-secondary btn-sm" type="submit">
                             <i class="bx bx-filter-alt me-1"></i> Filter
                         </button>
+
+                        <a href="{{ route('realisasi-kpi-divisi-kualitatif.index', ['per_page' => $perPage]) }}"
+                            class="btn btn-light btn-sm">
+                            <i class="bx bx-reset me-1"></i> Reset
+                        </a>
                     </form>
                 </div>
             </div>
@@ -88,7 +99,7 @@
                                 <th>BULAN</th>
                                 <th>TAHUN</th>
                                 <th class="text-end">SKOR KPI DIVISI</th>
-                                <th style="width:160px">AKSI</th>
+                                <th style="width:320px">AKSI</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -99,6 +110,8 @@
                             @else
                                 @forelse($users as $i => $u)
                                     @php $r = $realByUser[$u->id] ?? null; @endphp
+                                    @php $needsReinput = !$r || in_array($r->status, ['rejected', 'stale'], true); @endphp
+
                                     <tr>
                                         <td>{{ ($users->currentPage() - 1) * $users->perPage() + $i + 1 }}</td>
                                         <td class="fw-semibold">{{ $u->full_name }}</td>
@@ -113,38 +126,62 @@
                                             @endif
                                         </td>
                                         <td>
+                                            {{-- ICON-ONLY + info di samping (nowrap) --}}
                                             @if ($me->role === 'leader')
-                                                @if (!$r || $r->status === 'rejected' || $r->status === 'stale')
-                                                    <a class="btn btn-sm btn-primary"
-                                                        href="{{ route('realisasi-kpi-divisi-kualitatif.create', ['user_id' => $u->id, 'bulan' => $bulan, 'tahun' => $tahun]) }}">
-                                                        {{ $r && $r->status === 'rejected' ? 'Ajukan Ulang' : ($r && $r->status === 'stale' ? 'Input Ulang' : 'Input') }}
-                                                    </a>
-                                                    @if ($r && $r->status === 'stale')
-                                                        <small
-                                                            class="text-warning d-block mt-1">{{ $r->hr_note ?? 'Perlu input ulang: data berubah.' }}</small>
-                                                    @endif
-                                                    @if ($r && $r->status === 'rejected' && $r->hr_note)
-                                                        <small class="text-danger d-block mt-1">Ditolak:
-                                                            {{ $r->hr_note }}</small>
-                                                    @endif
-                                                @elseif ($r->status === 'submitted')
-                                                    <span class="badge bg-label-warning">Tunggu</span>
+                                                @if ($needsReinput)
+                                                    <div class="d-flex align-items-center flex-nowrap gap-2">
+                                                        <a class="btn btn-icon btn-sm btn-primary"
+                                                            href="{{ route('realisasi-kpi-divisi-kualitatif.create', ['user_id' => $u->id, 'bulan' => $bulan, 'tahun' => $tahun]) }}"
+                                                            title="@if (!$r) Input @elseif($r->status === 'rejected') Ajukan Ulang @else Input Ulang @endif"
+                                                            aria-label="@if (!$r) Input @elseif($r->status === 'rejected') Ajukan Ulang @else Input Ulang @endif">
+                                                            <i class="bx bx-edit"></i>
+                                                        </a>
+
+                                                        {{-- Keterangan di samping tombol --}}
+                                                        @if ($r && $r->status === 'stale')
+                                                            <small class="text-warning d-flex align-items-center"
+                                                                style="white-space: nowrap;">
+                                                                <i
+                                                                    class="bx bx-error me-1"></i>{{ $r->hr_note ?? 'Perlu input ulang: data berubah.' }}
+                                                            </small>
+                                                        @elseif ($r && $r->status === 'rejected' && $r->hr_note)
+                                                            <small class="text-danger d-flex align-items-center"
+                                                                style="white-space: nowrap;">
+                                                                <i class="bx bx-error-circle me-1"></i>Ditolak:
+                                                                {{ $r->hr_note }}
+                                                            </small>
+                                                        @endif
+                                                    </div>
+                                                @elseif ($r && $r->status === 'submitted')
+                                                    <span class="badge bg-label-warning" title="Menunggu persetujuan"
+                                                        aria-label="Menunggu persetujuan">
+                                                        <i class="bx bx-time-five"></i>
+                                                    </span>
                                                 @else
-                                                    <a class="btn btn-sm btn-outline-secondary"
-                                                        href="{{ route('realisasi-kpi-divisi-kualitatif.show', $r->id) }}">Detail</a>
+                                                    <a class="btn btn-icon btn-sm btn-outline-secondary"
+                                                        href="{{ route('realisasi-kpi-divisi-kualitatif.show', $r->id) }}"
+                                                        title="Detail" aria-label="Detail">
+                                                        <i class="bx bx-show"></i>
+                                                    </a>
                                                 @endif
                                             @elseif ($me->role === 'hr' || $me->role === 'owner')
                                                 @if ($r)
-                                                    <a class="btn btn-sm btn-outline-secondary"
-                                                        href="{{ route('realisasi-kpi-divisi-kualitatif.show', $r->id) }}">Detail</a>
+                                                    <a class="btn btn-icon btn-sm btn-outline-secondary"
+                                                        href="{{ route('realisasi-kpi-divisi-kualitatif.show', $r->id) }}"
+                                                        title="Detail" aria-label="Detail">
+                                                        <i class="bx bx-show"></i>
+                                                    </a>
                                                 @else
                                                     <span class="text-muted">-</span>
                                                 @endif
                                             @else
                                                 {{-- karyawan --}}
                                                 @if ($me->id === $u->id && $r)
-                                                    <a class="btn btn-sm btn-outline-secondary"
-                                                        href="{{ route('realisasi-kpi-divisi-kualitatif.show', $r->id) }}">Detail</a>
+                                                    <a class="btn btn-icon btn-sm btn-outline-secondary"
+                                                        href="{{ route('realisasi-kpi-divisi-kualitatif.show', $r->id) }}"
+                                                        title="Detail" aria-label="Detail">
+                                                        <i class="bx bx-show"></i>
+                                                    </a>
                                                 @else
                                                     <span class="text-muted">-</span>
                                                 @endif

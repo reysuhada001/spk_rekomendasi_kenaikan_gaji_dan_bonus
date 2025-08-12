@@ -4,12 +4,26 @@ namespace App\Http\Controllers;
 
 use App\Models\Division;
 use App\Models\KpiDivisi;
+
+// Distribusi target (khusus kuantitatif)
 use App\Models\KpiDivisiDistribution;
 use App\Models\KpiDivisiDistributionItem;
+
+// Realisasi KUANTITATIF
 use App\Models\KpiDivisiKuantitatifRealization;
 use App\Models\KpiDivisiKuantitatifRealizationItem;
+
+// Realisasi KUALITATIF
 use App\Models\KpiDivisiKualitatifRealization;
 use App\Models\KpiDivisiKualitatifRealizationItem;
+
+// Realisasi RESPONSE
+use App\Models\KpiDivisiResponseRealization;
+use App\Models\KpiDivisiResponseRealizationItem;
+
+// Realisasi PERSENTASE (per KPI, bukan per karyawan)
+use App\Models\KpiDivisiPersentaseRealization;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -66,22 +80,22 @@ class KpiDivisiController extends Controller
         ]);
 
         DB::transaction(function () use ($data) {
-            // create KPI (bobot null → wajib AHP ulang)
+            // 1) Buat KPI (bobot null → wajib AHP ulang)
             $kpi = KpiDivisi::create($data + ['bobot'=>null]);
 
-            // Reset AHP (bobot) untuk SEMUA KPI dalam periode & divisi yang sama
+            // 2) Reset AHP (bobot) untuk SEMUA KPI dalam periode & divisi yang sama
             KpiDivisi::where('division_id', $kpi->division_id)
                 ->where('bulan', $kpi->bulan)
                 ->where('tahun', $kpi->tahun)
                 ->update(['bobot' => null]);
 
-            // Tandai Distribusi periode/divisi sebagai stale (jika ada)
+            // 3) Distribusi → stale (khusus kuantitatif)
             KpiDivisiDistribution::where('division_id', $kpi->division_id)
                 ->where('bulan', $kpi->bulan)
                 ->where('tahun', $kpi->tahun)
                 ->update(['status'=>'stale','hr_note'=>'Perlu input ulang: KPI Divisi berubah.']);
 
-            // Realisasi KUANTITATIF → stale & bersihkan item KPI ini
+            // 4) Realisasi KUANTITATIF → stale & bersihkan item KPI ini
             $realQIds = KpiDivisiKuantitatifRealization::where('division_id',$kpi->division_id)
                 ->where('bulan',$kpi->bulan)->where('tahun',$kpi->tahun)
                 ->pluck('id');
@@ -95,7 +109,7 @@ class KpiDivisiController extends Controller
                     ->where('kpi_divisi_id',$kpi->id)->delete();
             }
 
-            // Realisasi KUALITATIF → stale & bersihkan item KPI ini
+            // 5) Realisasi KUALITATIF → stale & bersihkan item KPI ini
             $realKIds = KpiDivisiKualitatifRealization::where('division_id',$kpi->division_id)
                 ->where('bulan',$kpi->bulan)->where('tahun',$kpi->tahun)
                 ->pluck('id');
@@ -109,7 +123,30 @@ class KpiDivisiController extends Controller
                     ->where('kpi_divisi_id',$kpi->id)->delete();
             }
 
-            // (opsional) Bersihkan distribusi item KPI ini (tidak wajib, karena status sudah stale)
+            // 6) Realisasi RESPONSE → stale & bersihkan item KPI ini
+            $realRIds = KpiDivisiResponseRealization::where('division_id', $kpi->division_id)
+                ->where('bulan', $kpi->bulan)->where('tahun', $kpi->tahun)
+                ->pluck('id');
+            if ($realRIds->isNotEmpty()) {
+                KpiDivisiResponseRealization::whereIn('id',$realRIds)->update([
+                    'status'      => 'stale',
+                    'hr_note'     => 'Perlu input ulang: KPI Divisi response berubah.',
+                    'total_score' => null,
+                ]);
+                KpiDivisiResponseRealizationItem::whereIn('realization_id',$realRIds)
+                    ->where('kpi_divisi_id',$kpi->id)->delete();
+            }
+
+            // 7) Realisasi PERSENTASE → stale (per KPI; cukup set status & kosongkan skor)
+            if ($kpi->tipe === 'persentase') {
+                KpiDivisiPersentaseRealization::where('kpi_divisi_id', $kpi->id)->update([
+                    'status'  => 'stale',
+                    'hr_note' => 'Perlu input ulang: KPI Divisi persentase berubah.',
+                    'score'   => null,
+                ]);
+            }
+
+            // 8) (Opsional) Bersihkan distribusi item KPI ini
             KpiDivisiDistribution::where('division_id',$kpi->division_id)
                 ->where('bulan',$kpi->bulan)->where('tahun',$kpi->tahun)
                 ->each(function($dist) use ($kpi){
@@ -135,22 +172,21 @@ class KpiDivisiController extends Controller
         ]);
 
         DB::transaction(function () use ($kpiDivisi, $data) {
-            $old = $kpiDivisi->replicate();
             $kpiDivisi->update($data + ['bobot'=>$kpiDivisi->bobot]); // bobot akan direset massal di bawah
 
-            // Reset AHP (bobot) untuk SEMUA KPI dalam periode & divisi yang sama
+            // 1) Reset AHP (bobot) untuk SEMUA KPI dalam periode & divisi yang sama
             KpiDivisi::where('division_id', $kpiDivisi->division_id)
                 ->where('bulan', $kpiDivisi->bulan)
                 ->where('tahun', $kpiDivisi->tahun)
                 ->update(['bobot' => null]);
 
-            // Tandai Distribusi periode/divisi sebagai stale (jika ada)
+            // 2) Distribusi → stale
             KpiDivisiDistribution::where('division_id', $kpiDivisi->division_id)
                 ->where('bulan', $kpiDivisi->bulan)
                 ->where('tahun', $kpiDivisi->tahun)
                 ->update(['status'=>'stale','hr_note'=>'Perlu input ulang: KPI Divisi berubah.']);
 
-            // Realisasi KUANTITATIF → stale & bersihkan item KPI ini
+            // 3) Realisasi KUANTITATIF → stale & bersihkan item KPI ini
             $realQIds = KpiDivisiKuantitatifRealization::where('division_id',$kpiDivisi->division_id)
                 ->where('bulan',$kpiDivisi->bulan)->where('tahun',$kpiDivisi->tahun)
                 ->pluck('id');
@@ -164,7 +200,7 @@ class KpiDivisiController extends Controller
                     ->where('kpi_divisi_id',$kpiDivisi->id)->delete();
             }
 
-            // Realisasi KUALITATIF → stale & bersihkan item KPI ini
+            // 4) Realisasi KUALITATIF → stale & bersihkan item KPI ini
             $realKIds = KpiDivisiKualitatifRealization::where('division_id',$kpiDivisi->division_id)
                 ->where('bulan',$kpiDivisi->bulan)->where('tahun',$kpiDivisi->tahun)
                 ->pluck('id');
@@ -178,7 +214,30 @@ class KpiDivisiController extends Controller
                     ->where('kpi_divisi_id',$kpiDivisi->id)->delete();
             }
 
-            // (opsional) Bersihkan distribusi item KPI ini (tidak wajib, karena status sudah stale)
+            // 5) Realisasi RESPONSE → stale & bersihkan item KPI ini
+            $realRIds = KpiDivisiResponseRealization::where('division_id', $kpiDivisi->division_id)
+                ->where('bulan', $kpiDivisi->bulan)->where('tahun', $kpiDivisi->tahun)
+                ->pluck('id');
+            if ($realRIds->isNotEmpty()) {
+                KpiDivisiResponseRealization::whereIn('id',$realRIds)->update([
+                    'status'      => 'stale',
+                    'hr_note'     => 'Perlu input ulang: KPI Divisi response berubah.',
+                    'total_score' => null,
+                ]);
+                KpiDivisiResponseRealizationItem::whereIn('realization_id',$realRIds)
+                    ->where('kpi_divisi_id',$kpiDivisi->id)->delete();
+            }
+
+            // 6) Realisasi PERSENTASE → stale (per KPI)
+            if ($kpiDivisi->tipe === 'persentase') {
+                KpiDivisiPersentaseRealization::where('kpi_divisi_id', $kpiDivisi->id)->update([
+                    'status'  => 'stale',
+                    'hr_note' => 'Perlu input ulang: KPI Divisi persentase berubah.',
+                    'score'   => null,
+                ]);
+            }
+
+            // 7) Bersihkan distribusi item KPI ini (kalau ada record distribusinya)
             KpiDivisiDistribution::where('division_id',$kpiDivisi->division_id)
                 ->where('bulan',$kpiDivisi->bulan)->where('tahun',$kpiDivisi->tahun)
                 ->each(function($dist) use ($kpiDivisi){
@@ -197,19 +256,19 @@ class KpiDivisiController extends Controller
             $snap = $kpiDivisi->replicate();
             $kpiDivisi->delete();
 
-            // Reset AHP (bobot) untuk SEMUA KPI dalam periode & divisi yang sama
+            // 1) Reset AHP (bobot) untuk SEMUA KPI dalam periode & divisi yang sama
             KpiDivisi::where('division_id', $snap->division_id)
                 ->where('bulan', $snap->bulan)
                 ->where('tahun', $snap->tahun)
                 ->update(['bobot' => null]);
 
-            // Tandai Distribusi periode/divisi sebagai stale (jika ada)
+            // 2) Distribusi → stale
             KpiDivisiDistribution::where('division_id', $snap->division_id)
                 ->where('bulan', $snap->bulan)
                 ->where('tahun', $snap->tahun)
                 ->update(['status'=>'stale','hr_note'=>'Perlu input ulang: KPI Divisi berubah.']);
 
-            // Realisasi KUANTITATIF → stale & bersihkan item KPI ini
+            // 3) Realisasi KUANTITATIF → stale & bersihkan item KPI ini
             $realQIds = KpiDivisiKuantitatifRealization::where('division_id',$snap->division_id)
                 ->where('bulan',$snap->bulan)->where('tahun',$snap->tahun)
                 ->pluck('id');
@@ -223,7 +282,7 @@ class KpiDivisiController extends Controller
                     ->where('kpi_divisi_id',$snap->id)->delete();
             }
 
-            // Realisasi KUALITATIF → stale & bersihkan item KPI ini
+            // 4) Realisasi KUALITATIF → stale & bersihkan item KPI ini
             $realKIds = KpiDivisiKualitatifRealization::where('division_id',$snap->division_id)
                 ->where('bulan',$snap->bulan)->where('tahun',$snap->tahun)
                 ->pluck('id');
@@ -237,7 +296,30 @@ class KpiDivisiController extends Controller
                     ->where('kpi_divisi_id',$snap->id)->delete();
             }
 
-            // Hapus distribusi item KPI ini (kalau ada record distribusinya)
+            // 5) Realisasi RESPONSE → stale & bersihkan item KPI ini
+            $realRIds = KpiDivisiResponseRealization::where('division_id', $snap->division_id)
+                ->where('bulan', $snap->bulan)->where('tahun', $snap->tahun)
+                ->pluck('id');
+            if ($realRIds->isNotEmpty()) {
+                KpiDivisiResponseRealization::whereIn('id',$realRIds)->update([
+                    'status'      => 'stale',
+                    'hr_note'     => 'Perlu input ulang: KPI Divisi response berubah.',
+                    'total_score' => null,
+                ]);
+                KpiDivisiResponseRealizationItem::whereIn('realization_id',$realRIds)
+                    ->where('kpi_divisi_id',$snap->id)->delete();
+            }
+
+            // 6) Realisasi PERSENTASE → stale (per KPI)
+            if ($snap->tipe === 'persentase') {
+                KpiDivisiPersentaseRealization::where('kpi_divisi_id', $snap->id)->update([
+                    'status'  => 'stale',
+                    'hr_note' => 'Perlu input ulang: KPI Divisi persentase berubah.',
+                    'score'   => null,
+                ]);
+            }
+
+            // 7) Hapus distribusi item KPI ini (kalau ada record distribusinya)
             KpiDivisiDistribution::where('division_id',$snap->division_id)
                 ->where('bulan',$snap->bulan)->where('tahun',$snap->tahun)
                 ->each(function($dist) use ($snap){

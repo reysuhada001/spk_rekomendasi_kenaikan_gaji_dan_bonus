@@ -3,25 +3,28 @@
 @section('content')
     <div class="container py-4">
         <div class="card">
-            <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <h5 class="mb-0">Pembobotan AHP — KPI Divisi</h5>
+            {{-- Header + Filter (mepet kiri) --}}
+            <div class="card-header d-flex align-items-center justify-content-start flex-wrap gap-2">
+                <h5 class="mb-0 me-3">Pembobotan AHP — KPI Divisi</h5>
 
-                {{-- Filter di pojok kanan atas --}}
+                {{-- Filter di sebelah kiri --}}
                 <form method="GET" action="{{ route('ahp.kpi-divisi.index') }}"
-                    class="d-flex align-items-center ms-auto flex-wrap gap-2">
-                    <div class="input-group input-group-sm" style="width: 180px;">
-                        <span class="input-group-text">Divisi</span>
+                    class="d-flex align-items-center flex-wrap gap-2">
+                    <div class="input-group input-group-sm" style="width: 240px;">
+                        <span class="input-group-text"><i class="bx bx-buildings"></i>&nbsp;Divisi</span>
                         <select name="division_id" class="form-select">
                             <option value="" {{ empty($division_id) ? 'selected' : '' }}>Pilih Divisi</option>
                             @foreach ($divisions as $d)
                                 <option value="{{ $d->id }}"
-                                    {{ (string) $division_id === (string) $d->id ? 'selected' : '' }}>{{ $d->name }}
+                                    {{ (string) $division_id === (string) $d->id ? 'selected' : '' }}>
+                                    {{ $d->name }}
                                 </option>
                             @endforeach
                         </select>
                     </div>
-                    <div class="input-group input-group-sm" style="width: 160px;">
-                        <span class="input-group-text">Bulan</span>
+
+                    <div class="input-group input-group-sm" style="width: 200px;">
+                        <span class="input-group-text"><i class="bx bx-calendar"></i>&nbsp;Bulan</span>
                         <select name="bulan" class="form-select">
                             <option value="" {{ is_null($bulan) ? 'selected' : '' }}>Pilih Bulan</option>
                             @foreach ($bulanList as $num => $label)
@@ -32,22 +35,30 @@
                             @endforeach
                         </select>
                     </div>
-                    <div class="input-group input-group-sm" style="width: 160px;">
-                        <span class="input-group-text">Tahun</span>
-                        <input type="number" name="tahun" class="form-control" value="{{ $tahun }}">
+
+                    <div class="input-group input-group-sm" style="width: 180px;">
+                        <span class="input-group-text"><i class="bx bx-calendar-event"></i>&nbsp;Tahun</span>
+                        <input type="number" name="tahun" class="form-control" placeholder="YYYY"
+                            min="{{ date('Y') - 5 }}" max="{{ date('Y') + 5 }}" value="{{ $tahun ?? '' }}">
                     </div>
+
                     <button class="btn btn-secondary btn-sm" type="submit">
                         <i class="bx bx-filter-alt me-1"></i> Filter
                     </button>
+
+                    <a href="{{ route('ahp.kpi-divisi.index') }}" class="btn btn-light btn-sm">
+                        <i class="bx bx-reset me-1"></i> Reset
+                    </a>
                 </form>
             </div>
 
             <div class="card-body">
-
-
                 @if (is_null($division_id) || is_null($bulan) || is_null($tahun))
+                    {{-- kosongkan kalau belum pilih filter lengkap --}}
                 @elseif ($kpis->count() < 2)
-                    <div class="alert alert-warning">Minimal diperlukan <strong>2 KPI</strong> pada periode tersebut.</div>
+                    <div class="alert alert-warning">
+                        Minimal diperlukan <strong>2 KPI</strong> pada periode tersebut.
+                    </div>
                 @else
                     <form method="POST" action="{{ route('ahp.kpi-divisi.hitung') }}">
                         @csrf
@@ -70,9 +81,9 @@
                                         <tr>
                                             <td class="fw-semibold">{{ $k1->nama }}</td>
                                             <td class="text-center">
-                                                <select class="form-select"
+                                                <select class="form-select form-select-sm"
                                                     name="pair_{{ $k1->id }}_{{ $k2->id }}" required
-                                                    style="min-width:120px;">
+                                                    style="min-width:140px;">
                                                     @foreach ($saatyOptions as $val => $label)
                                                         <option value="{{ $val }}">{{ $label }}</option>
                                                     @endforeach
@@ -86,8 +97,9 @@
                         </div>
 
                         <div class="d-flex justify-content-end mt-3">
-                            <button type="submit" class="btn btn-primary"><i class="bx bx-calculator me-1"></i> Hitung &
-                                Simpan Bobot</button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bx bx-calculator me-1"></i> Hitung & Simpan Bobot
+                            </button>
                         </div>
                     </form>
                 @endif

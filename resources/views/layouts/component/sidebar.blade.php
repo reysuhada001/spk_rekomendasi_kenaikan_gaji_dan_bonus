@@ -41,6 +41,13 @@
                     </a>
                 </li>
 
+                <li class="menu-item {{ request()->routeIs('ahp.global.index') ? 'active' : '' }}">
+                    <a href="{{ route('ahp.global.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-globe"></i>
+                        <div data-i18n="Analytics">Bobot Kriteria</div>
+                    </a>
+                </li>
+
                 <li class="menu-header small text-uppercase">
                     <span class="menu-header-text">KPI Umum</span>
                 </li>
@@ -89,23 +96,94 @@
                     </a>
                 </li>
 
-                <li class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-kuantitatif.index') ? 'active' : '' }}">
-                    <a href="{{ route('realisasi-kpi-divisi-kuantitatif.index') }}" class="menu-link">
-                        <i class="menu-icon tf-icons bx bx-transfer"></i>
-                        <div data-i18n="Analytics">Realisasi Kuantitatif</div>
+                <li
+                    class="menu-item {{ request()->routeIs([
+                        'realisasi-kpi-divisi-kuantitatif.index',
+                        'realisasi-kpi-divisi-kualitatif.index',
+                        'realisasi-kpi-divisi-response.index',
+                        'realisasi-kpi-divisi-persentase.index',
+                    ])
+                        ? 'open'
+                        : '' }}">
+                    <a href="javascript:void(0);" class="menu-link menu-toggle">
+                        <i class="menu-icon tf-icons bx bx-task"></i>
+                        <div data-i18n="Analytics">Realisasi Target</div>
+                    </a>
+                    <ul class="menu-sub">
+                        <li
+                            class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-kuantitatif.index') ? 'active' : '' }}">
+                            <a href="{{ route('realisasi-kpi-divisi-kuantitatif.index') }}" class="menu-link">
+                                <div data-i18n="Analytics">Kuantitatif</div>
+                            </a>
+                        </li>
+                        <li
+                            class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-kualitatif.index') ? 'active' : '' }}">
+                            <a href="{{ route('realisasi-kpi-divisi-kualitatif.index') }}" class="menu-link">
+                                <div data-i18n="Analytics">Kualitatif</div>
+                            </a>
+                        </li>
+                        <li
+                            class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-response.index') ? 'active' : '' }}">
+                            <a href="{{ route('realisasi-kpi-divisi-response.index') }}" class="menu-link">
+                                <div data-i18n="Analytics">Response</div>
+                            </a>
+                        </li>
+                        <li
+                            class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-persentase.index') ? 'active' : '' }}">
+                            <a href="{{ route('realisasi-kpi-divisi-persentase.index') }}" class="menu-link">
+                                <div data-i18n="Analytics">Persentase</div>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="menu-item {{ request()->routeIs('kpi-divisi.skor-karyawan.index') ? 'active' : '' }}">
+                    <a href="{{ route('kpi-divisi.skor-karyawan.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-medal"></i>
+                        <div data-i18n="Analytics">Skor Karyawan</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('kpi-divisi.skor-divisi.index') ? 'active' : '' }}">
+                    <a href="{{ route('kpi-divisi.skor-divisi.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-bar-chart-alt"></i>
+                        <div data-i18n="Analytics">Skor Divisi</div>
                     </a>
                 </li>
 
-                <li class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-kualitatif.index') ? 'active' : '' }}">
-                    <a href="{{ route('realisasi-kpi-divisi-kualitatif.index') }}" class="menu-link">
-                        <i class="menu-icon tf-icons bx bx-transfer"></i>
-                        <div data-i18n="Analytics">Realisasi KUalitatif</div>
+                <li class="menu-header small text-uppercase">
+                    <span class="menu-header-text">Penilaian Karyawan</span>
+                </li>
+
+                <li class="menu-item {{ request()->routeIs('aspek.index') ? 'active' : '' }}">
+                    <a href="{{ route('aspek.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-layer"></i>
+                        <div data-i18n="Analytics">Aspek</div>
                     </a>
                 </li>
-                <li class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-response.index') ? 'active' : '' }}">
-                    <a href="{{ route('realisasi-kpi-divisi-response.index') }}" class="menu-link">
-                        <i class="menu-icon tf-icons bx bx-transfer"></i>
-                        <div data-i18n="Analytics">Realisasi Response</div>
+                <li class="menu-item {{ request()->routeIs('peer.admin.index') ? 'active' : '' }}">
+                    <a href="{{ route('peer.admin.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-check-circle"></i>
+                        <div data-i18n="Analytics">Nilai</div>
+                    </a>
+                </li>
+                <li class="menu-header small text-uppercase">
+                    <span class="menu-header-text">Leaderboard</span>
+                </li>
+                <li class="menu-item {{ request()->routeIs('leaderboard.bulanan.index') ? 'active' : '' }}">
+                    <a href="{{ route('leaderboard.bulanan.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-check-circle"></i>
+                        <div data-i18n="Analytics">Global</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('leaderboard.divisi.index') ? 'active' : '' }}">
+                    <a href="{{ route('leaderboard.divisi.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-check-circle"></i>
+                        <div data-i18n="Analytics">Karyawan</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('leaderboard.divisi-kpi.index') ? 'active' : '' }}">
+                    <a href="{{ route('leaderboard.divisi-kpi.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-check-circle"></i>
+                        <div data-i18n="Analytics">Divisi</div>
                     </a>
                 </li>
             @endif
@@ -140,23 +218,112 @@
                     </a>
                 </li>
 
-                <li class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-kuantitatif.index') ? 'active' : '' }}">
-                    <a href="{{ route('realisasi-kpi-divisi-kuantitatif.index') }}" class="menu-link">
-                        <i class="menu-icon tf-icons bx bx-transfer"></i>
-                        <div data-i18n="Analytics">Realisasi Kuantitatif</div>
+                <li
+                    class="menu-item {{ request()->routeIs([
+                        'realisasi-kpi-divisi-kuantitatif.index',
+                        'realisasi-kpi-divisi-kualitatif.index',
+                        'realisasi-kpi-divisi-response.index',
+                        'realisasi-kpi-divisi-persentase.index',
+                    ])
+                        ? 'open'
+                        : '' }}">
+                    <a href="javascript:void(0);" class="menu-link menu-toggle">
+                        <i class="menu-icon tf-icons bx bx-task"></i>
+                        <div data-i18n="Analytics">Realisasi Target</div>
+                    </a>
+                    <ul class="menu-sub">
+                        <li
+                            class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-kuantitatif.index') ? 'active' : '' }}">
+                            <a href="{{ route('realisasi-kpi-divisi-kuantitatif.index') }}" class="menu-link">
+                                <div data-i18n="Analytics">Kuantitatif</div>
+                            </a>
+                        </li>
+                        <li
+                            class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-kualitatif.index') ? 'active' : '' }}">
+                            <a href="{{ route('realisasi-kpi-divisi-kualitatif.index') }}" class="menu-link">
+                                <div data-i18n="Analytics">Kualitatif</div>
+                            </a>
+                        </li>
+                        <li
+                            class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-response.index') ? 'active' : '' }}">
+                            <a href="{{ route('realisasi-kpi-divisi-response.index') }}" class="menu-link">
+                                <div data-i18n="Analytics">Response</div>
+                            </a>
+                        </li>
+                        <li
+                            class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-persentase.index') ? 'active' : '' }}">
+                            <a href="{{ route('realisasi-kpi-divisi-persentase.index') }}" class="menu-link">
+                                <div data-i18n="Analytics">Persentase</div>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="menu-item {{ request()->routeIs('kpi-divisi.skor-karyawan.index') ? 'active' : '' }}">
+                    <a href="{{ route('kpi-divisi.skor-karyawan.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-medal"></i>
+                        <div data-i18n="Analytics">Skor Karyawan</div>
                     </a>
                 </li>
+                <li class="menu-item {{ request()->routeIs('kpi-divisi.skor-divisi.index') ? 'active' : '' }}">
+                    <a href="{{ route('kpi-divisi.skor-divisi.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-bar-chart-alt"></i>
+                        <div data-i18n="Analytics">Skor Divisi</div>
+                    </a>
+                </li>
+            @endif
+        @endauth
 
-                <li class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-kualitatif.index') ? 'active' : '' }}">
-                    <a href="{{ route('realisasi-kpi-divisi-kualitatif.index') }}" class="menu-link">
-                        <i class="menu-icon tf-icons bx bx-transfer"></i>
-                        <div data-i18n="Analytics">Realisasi KUalitatif</div>
+        @auth
+            @if (auth()->user()->role === 'karyawan')
+                <li class="menu-item {{ request()->routeIs('dashboard.karyawan') ? 'active' : '' }}">
+                    <a href="{{ route('dashboard.karyawan') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-home-circle"></i>
+                        <div data-i18n="Analytics">Dashboard</div>
                     </a>
                 </li>
-                <li class="menu-item {{ request()->routeIs('realisasi-kpi-divisi-response.index') ? 'active' : '' }}">
-                    <a href="{{ route('realisasi-kpi-divisi-response.index') }}" class="menu-link">
-                        <i class="menu-icon tf-icons bx bx-transfer"></i>
-                        <div data-i18n="Analytics">Realisasi Response</div>
+                <li class="menu-header small text-uppercase">
+                    <span class="menu-header-text">Penilaian Karyawan</span>
+                </li>
+                <li class="menu-item {{ request()->routeIs('peer.index') ? 'active' : '' }}">
+                    <a href="{{ route('peer.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-check-circle"></i>
+                        <div data-i18n="Analytics">Nilai</div>
+                    </a>
+                </li>
+                <li class="menu-header small text-uppercase">
+                    <span class="menu-header-text">Rekomendasi</span>
+                </li>
+                <li class="menu-item {{ request()->routeIs('bonus.rekomendasi.index') ? 'active' : '' }}">
+                    <a href="{{ route('bonus.rekomendasi.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-check-circle"></i>
+                        <div data-i18n="Analytics">Bonus</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('salary.raise.index') ? 'active' : '' }}">
+                    <a href="{{ route('salary.raise.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-check-circle"></i>
+                        <div data-i18n="Analytics">Kenaikan Gaji</div>
+                    </a>
+                </li>
+                <li class="menu-header small text-uppercase">
+                    <span class="menu-header-text">Leaderboard</span>
+                </li>
+                <li class="menu-item {{ request()->routeIs('leaderboard.bulanan.index') ? 'active' : '' }}">
+                    <a href="{{ route('leaderboard.bulanan.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-check-circle"></i>
+                        <div data-i18n="Analytics">Global</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('leaderboard.divisi.index') ? 'active' : '' }}">
+                    <a href="{{ route('leaderboard.divisi.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-check-circle"></i>
+                        <div data-i18n="Analytics">Karyawan</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('leaderboard.divisi-kpi.index') ? 'active' : '' }}">
+                    <a href="{{ route('leaderboard.divisi-kpi.index') }}" class="menu-link">
+                        <i class="menu-icon tf-icons bx bx-check-circle"></i>
+                        <div data-i18n="Analytics">Divisi</div>
                     </a>
                 </li>
             @endif

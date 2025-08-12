@@ -93,7 +93,7 @@
                                             // tampilkan bobot sebagai persen tanpa nol buntut
                                             $bobotPercent = $k->bobot !== null ? round($k->bobot * 100, 0) : null;
                                         @endphp
-                                        {{ $bobotPercent !== null ? rtrim(rtrim(number_format($bobotPercent, 0  , '.', ''), '0'), '.') . '%' : '-' }}
+                                        {{ $bobotPercent !== null ? rtrim(rtrim(number_format($bobotPercent, 0, '.', ''), '0'), '.') . '%' : '-' }}
                                     </td>
                                     <td>{{ $bulanList[$k->bulan] ?? $k->bulan }}</td>
                                     <td>{{ $k->tahun }}</td>

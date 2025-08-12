@@ -13,7 +13,7 @@ class KpiUmumController extends Controller
 {
     public function __construct()
     {
-        // index boleh owner/hr/leader
+        // index boleh owner/hr/leader (sesuai permintaan sebelumnya)
         $this->middleware('role:owner,hr,leader')->only('index');
         // CRUD khusus hr
         $this->middleware('role:hr')->except('index');
@@ -40,7 +40,6 @@ class KpiUmumController extends Controller
 
         $me = Auth::user();
 
-        // daftar bulan untuk select di view
         $bulanList = [
             1=>'Januari',2=>'Februari',3=>'Maret',4=>'April',5=>'Mei',6=>'Juni',
             7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'
@@ -59,12 +58,13 @@ class KpiUmumController extends Controller
             'bulan'  => 'required|integer|min:1|max:12',
             'tahun'  => 'required|integer|min:2000|max:2100',
         ]);
-        // bobot tidak diinput, akan direset ke 0
+
+        // bobot tidak diinput, akan direset ke 0 untuk seluruh KPI periode terkait
         $validated['bobot'] = null;
 
         DB::transaction(function() use ($validated) {
             KpiUmum::create($validated);
-            // penambahan data → reset bobot periode terkait
+            // penambahan data → reset bobot & realisasi pada periode terkait
             $this->invalidateWeightsAndRealizations((int)$validated['bulan'], (int)$validated['tahun']);
         });
 
@@ -87,30 +87,34 @@ class KpiUmumController extends Controller
             $oldBulan = (int)$kpi->bulan;
             $oldTahun = (int)$kpi->tahun;
 
+            // update data KPI
             $kpi->update($validated);
 
             $newBulan = (int)$validated['bulan'];
             $newTahun = (int)$validated['tahun'];
 
+            // **PERBAIKAN**:
+            // - Tetap invalidasi periode LAMA jika periode berubah
+            // - SELALU invalidasi periode BARU (meski bulan/tahun sama), karena ada PERUBAHAN data KPI
             if ($oldBulan !== $newBulan || $oldTahun !== $newTahun) {
                 $this->invalidateWeightsAndRealizations($oldBulan, $oldTahun);
-                $this->invalidateWeightsAndRealizations($newBulan, $newTahun);
             }
+            $this->invalidateWeightsAndRealizations($newBulan, $newTahun);
         });
 
         return redirect()->route('kpi-umum.index')
-            ->with('success','KPI Umum berhasil diperbarui.' . 
-                (($request->bulan != $kpi->bulan || $request->tahun != $kpi->tahun) ? ' Bobot periode terkait direset ke 0 — silakan lakukan pembobotan ulang.' : ''));
+            ->with('success','KPI Umum berhasil diperbarui. Bobot periode terkait direset ke 0 — silakan lakukan pembobotan ulang.');
     }
-
 
     public function destroy(KpiUmum $kpi)
     {
         DB::transaction(function() use ($kpi) {
             $bulan = (int)$kpi->bulan;
             $tahun = (int)$kpi->tahun;
+
             $kpi->delete();
-            // pengurangan data → reset bobot periode terkait
+
+            // pengurangan data → reset bobot & realisasi pada periode terkait
             $this->invalidateWeightsAndRealizations($bulan, $tahun);
         });
 
@@ -118,9 +122,13 @@ class KpiUmumController extends Controller
             ->with('success','KPI Umum berhasil dihapus. Bobot periode terkait direset ke 0 — silakan lakukan pembobotan ulang.');
     }
 
+    /**
+     * Reset bobot AHP semua KPI pada periode, dan tandai semua realisasi periode tsb menjadi stale
+     * + hapus itemnya supaya leader harus input ulang.
+     */
     private function invalidateWeightsAndRealizations(int $bulan, int $tahun): void
     {
-        // 1) reset bobot KPI
+        // 1) reset bobot KPI periode tsb → 0
         KpiUmum::where('bulan',$bulan)->where('tahun',$tahun)->update(['bobot'=>0]);
 
         // 2) invalidate semua realisasi periode tsb
@@ -130,7 +138,7 @@ class KpiUmumController extends Controller
             // hapus semua item realisasi agar pasti input ulang
             KpiUmumRealizationItem::where('realization_id',$r->id)->delete();
 
-            // tandai stale + reset skor
+            // tandai stale + reset skor total
             $r->update([
                 'total_score' => 0,
                 'status'      => 'stale',
