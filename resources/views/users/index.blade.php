@@ -1,5 +1,48 @@
 @extends('layouts.app')
 
+@push('styles')
+    <style>
+        th.password-col {
+            width: 280px;
+            min-width: 260px;
+        }
+
+        td .password-cell {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            width: 100%;
+            min-width: 260px;
+            max-width: 360px;
+            white-space: nowrap;
+        }
+
+        /* HILANGKAN BORDER INPUT di kolom password */
+        .password-cell input,
+        .password-cell input:focus,
+        .password-cell input[readonly] {
+            flex: 1;
+            min-width: 0;
+            background: transparent !important;
+            border: 0 !important;
+            border-color: transparent !important;
+            border-width: 0 !important;
+            outline: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            font-family: inherit;
+            font-size: 1rem;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .password-cell .btn {
+            flex-shrink: 0;
+        }
+    </style>
+@endpush
+
+
 @section('content')
     <div class="container py-4">
         <div class="card">
@@ -25,14 +68,12 @@
 
                     {{-- Search + Add (kanan) --}}
                     <form method="GET" action="{{ route('users.index') }}" class="d-flex align-items-center gap-2">
-                        {{-- pertahankan pilihan per_page saat mencari --}}
                         <input type="hidden" name="per_page" value="{{ $perPage }}">
-                        <div class="input-group input-group-sm" style="width: 120px;">
+                        <div class="input-group input-group-sm" style="width: 200px;">
                             <span class="input-group-text"><i class="bx bx-search"></i></span>
                             <input type="text" name="search" value="{{ $search }}" class="form-control"
                                 placeholder="Search...">
                         </div>
-
                         @if ($me->role === 'hr')
                             <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal"
                                 data-bs-target="#createModal">
@@ -49,13 +90,10 @@
                         <thead>
                             <tr>
                                 <th style="width:60px">#</th>
-                                <th>NAME</th>
-                                <th>NIK</th>
                                 <th>PHOTO</th>
                                 <th>EMAIL</th>
                                 <th>USERNAME</th>
-                                <th>PASSWORD</th>
-                                <th>PLAIN PASSWORD</th>
+                                <th class="password-col">PASSWORD</th>
                                 <th>ROLE</th>
                                 <th>DIVISION</th>
                                 @if ($me->role === 'hr')
@@ -67,23 +105,37 @@
                             @forelse ($users as $i => $u)
                                 <tr>
                                     <td>{{ ($users->currentPage() - 1) * $users->perPage() + $i + 1 }}</td>
-                                    <td class="fw-semibold">{{ $u->full_name }}</td>
-                                    <td>{{ $u->nik }}</td>
+
+                                    {{-- PHOTO --}}
                                     <td>
                                         @if ($u->photo)
-                                            <img src="{{ asset('storage/' . $u->photo) }}" alt="photo"
-                                                class="rounded-circle" width="36" height="36">
+                                            <img src="{{ asset('storage/' . ltrim($u->photo, '/')) }}" alt="photo"
+                                                class="rounded-circle" style="width:36px;height:36px;object-fit:cover;">
                                         @else
-                                            <div class="avatar-initial bg-label-secondary rounded-circle d-inline-flex align-items-center justify-content-center"
+                                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center bg-light text-secondary"
                                                 style="width:36px;height:36px;">
                                                 {{ strtoupper(substr($u->full_name, 0, 1)) }}
                                             </div>
                                         @endif
                                     </td>
-                                    <td>{{ $u->email }}</td>
+
+                                    <td class="fw-semibold">{{ $u->email }}</td>
                                     <td>{{ $u->username }}</td>
-                                    <td>••••••••</td>
-                                    <td>{{ $u->plain_password }}</td>
+
+                                    {{-- PASSWORD (isi plain_password, toggle show/hide) --}}
+                                    <td>
+                                        <div class="password-cell">
+                                            <input type="password" value="{{ $u->plain_password }}" readonly
+                                                id="pp-input-{{ $u->id }}"
+                                                style="border:0!important;box-shadow:none!important;background:transparent!important;outline:none!important;padding:0!important;">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                data-toggle-plain="#pp-input-{{ $u->id }}"
+                                                aria-label="Toggle password" title="Show/Hide">
+                                                <i class="bx bx-hide"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+
                                     <td class="text-uppercase">{{ $u->role }}</td>
                                     <td>{{ $u->division?->name ?? '-' }}</td>
 
@@ -112,7 +164,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="{{ $me->role === 'hr' ? 11 : 10 }}" class="text-muted py-4 text-center">
+                                    <td colspan="{{ $me->role === 'hr' ? 8 : 7 }}" class="text-muted py-4 text-center">
                                         Belum ada data.</td>
                                 </tr>
                             @endforelse
@@ -128,7 +180,6 @@
                 <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
                     <small class="text-muted">Showing {{ $from }} to {{ $to }} of {{ $total }}
                         entries</small>
-
                     @if ($users->hasPages())
                         {{ $users->onEachSide(1)->links() }}
                     @else
@@ -145,7 +196,7 @@
         </div>
     </div>
 
-    {{-- Modal Create (2 kolom) --}}
+    {{-- Modal Create --}}
     @if ($me->role === 'hr')
         <div class="modal fade" id="createModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -178,7 +229,14 @@
 
                             <div class="col-md-6">
                                 <label class="form-label">Password</label>
-                                <input type="text" name="password" class="form-control" required>
+                                <div class="input-group">
+                                    <input type="password" name="password" id="createPassword" class="form-control"
+                                        required>
+                                    <button class="input-group-text" type="button" id="toggleCreatePassword"
+                                        aria-label="Toggle password">
+                                        <i class="bx bx-hide"></i>
+                                    </button>
+                                </div>
                                 <small class="text-muted">* Disimpan juga ke plain_password sesuai permintaan.</small>
                             </div>
                             <div class="col-md-6">
@@ -205,6 +263,7 @@
                             <div class="col-md-6">
                                 <label class="form-label">Foto</label>
                                 <input type="file" name="photo" class="form-control" accept="image/*">
+                                <small class="text-muted d-block">Disarankan rasio persegi. Maks: 1MB.</small>
                             </div>
                         </div>
                     </div>
@@ -216,7 +275,7 @@
             </div>
         </div>
 
-        {{-- Modal Edit (2 kolom, password opsional) --}}
+        {{-- Modal Edit --}}
         <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered modal-lg">
                 <form id="editForm" class="modal-content" method="POST" enctype="multipart/form-data">
@@ -247,7 +306,13 @@
 
                             <div class="col-md-6">
                                 <label class="form-label">Password (kosongkan jika tidak ganti)</label>
-                                <input type="text" name="password" class="form-control">
+                                <div class="input-group">
+                                    <input type="password" name="password" id="editPassword" class="form-control">
+                                    <button class="input-group-text" type="button" id="toggleEditPassword"
+                                        aria-label="Toggle password">
+                                        <i class="bx bx-hide"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Role</label>
@@ -288,7 +353,7 @@
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        // SweetAlert2 Toast
+        // Toast
         const Toast = Swal.mixin({
             toast: true,
             position: 'bottom-end',
@@ -320,7 +385,7 @@
 
         // Konfirmasi hapus
         document.querySelectorAll('form.js-delete').forEach(form => {
-            form.addEventListener('submit', function(e) {
+            form.addEventListener('submit', e => {
                 e.preventDefault();
                 Swal.fire({
                     title: 'Hapus user ini?',
@@ -329,56 +394,79 @@
                     showCancelButton: true,
                     confirmButtonText: 'Ya, hapus',
                     cancelButtonText: 'Batal'
-                }).then((res) => {
+                }).then(res => {
                     if (res.isConfirmed) form.submit();
                 });
             });
         });
 
-        // ====== Create: toggle division required by role ======
+        // Toggle wajib division (create)
         function toggleCreateDivision() {
-            const role = document.getElementById('createRole').value;
+            const role = document.getElementById('createRole')?.value;
             const divSel = document.getElementById('createDivision');
+            if (!divSel) return;
             if (role === 'leader' || role === 'karyawan') {
                 divSel.required = true;
-                divSel.closest('.col-md-6').style.display = '';
             } else {
                 divSel.required = false;
                 divSel.value = '';
-                divSel.closest('.col-md-6').style.display = '';
             }
         }
         document.getElementById('createRole')?.addEventListener('change', toggleCreateDivision);
         toggleCreateDivision();
 
-        // ====== Edit: fill modal + toggle division by role ======
-        document.getElementById('editModal')?.addEventListener('show.bs.modal', function(event) {
-            const b = event.relatedTarget;
-            const id = b.getAttribute('data-id');
-
-            document.getElementById('editForm').action = "{{ url('users') }}/" + id;
+        // Set data edit + toggle wajib division
+        document.getElementById('editModal')?.addEventListener('show.bs.modal', e => {
+            const b = e.relatedTarget;
+            document.getElementById('editForm').action = "{{ url('users') }}/" + b.getAttribute('data-id');
             document.getElementById('editFullName').value = b.getAttribute('data-full_name');
             document.getElementById('editNik').value = b.getAttribute('data-nik');
             document.getElementById('editEmail').value = b.getAttribute('data-email');
             document.getElementById('editUsername').value = b.getAttribute('data-username');
             document.getElementById('editRole').value = b.getAttribute('data-role') ?? 'karyawan';
             document.getElementById('editDivision').value = b.getAttribute('data-division_id') ?? '';
-
-            toggleEditDivision(); // set required/not
+            toggleEditDivision();
         });
 
         function toggleEditDivision() {
-            const role = document.getElementById('editRole').value;
+            const role = document.getElementById('editRole')?.value;
             const divSel = document.getElementById('editDivision');
+            if (!divSel) return;
             if (role === 'leader' || role === 'karyawan') {
                 divSel.required = true;
-                divSel.closest('.col-md-3').style.display = '';
             } else {
                 divSel.required = false;
                 divSel.value = '';
-                divSel.closest('.col-md-3').style.display = '';
             }
         }
         document.getElementById('editRole')?.addEventListener('change', toggleEditDivision);
+
+        // Toggle password (create/edit)
+        function wireToggle(btnId, inputId) {
+            const btn = document.getElementById(btnId),
+                input = document.getElementById(inputId);
+            btn?.addEventListener('click', () => {
+                const isText = input.type === 'text';
+                input.type = isText ? 'password' : 'text';
+                const icon = btn.querySelector('i');
+                icon?.classList.toggle('bx-hide', !isText);
+                icon?.classList.toggle('bx-show', isText);
+            });
+        }
+        wireToggle('toggleCreatePassword', 'createPassword');
+        wireToggle('toggleEditPassword', 'editPassword');
+
+        // Toggle plain password di tabel
+        document.querySelectorAll('[data-toggle-plain]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const input = document.querySelector(btn.getAttribute('data-toggle-plain'));
+                if (!input) return;
+                const isText = input.type === 'text';
+                input.type = isText ? 'password' : 'text';
+                const icon = btn.querySelector('i');
+                icon?.classList.toggle('bx-hide', !isText);
+                icon?.classList.toggle('bx-show', isText);
+            });
+        });
     </script>
 @endpush

@@ -56,7 +56,7 @@
                             </div>
                         @endif
 
-                        <div class="input-group input-group-sm" style="width: 260px;">
+                        <div class="input-group input-group-sm" style="width: 200px;">
                             <span class="input-group-text"><i class="bx bx-search"></i></span>
                             <input type="text" name="search" value="{{ $search }}" class="form-control"
                                 placeholder="Cari karyawan...">

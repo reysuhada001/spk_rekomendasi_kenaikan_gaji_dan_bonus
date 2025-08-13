@@ -92,13 +92,6 @@
 
             <div class="card-body">
 
-                {{-- Info: jika periode belum dipilih --}}
-                @if (is_null($bulan) || is_null($tahun))
-                    <div class="alert alert-info mb-3">
-                        Silakan pilih <strong>Bulan</strong> dan <strong>Tahun</strong> terlebih dahulu.
-                    </div>
-                @endif
-
                 {{-- Tabel hasil --}}
                 <div class="table-responsive" style="white-space: nowrap; overflow:auto; max-height:65vh;">
                     <table class="table-hover table align-middle">

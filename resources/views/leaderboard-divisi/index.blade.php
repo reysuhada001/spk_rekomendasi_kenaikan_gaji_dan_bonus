@@ -82,7 +82,7 @@
                     <table class="table-hover table align-middle">
                         <thead>
                             <tr>
-                                <th style="width:60px">#</th>
+                                <th style="width:60px">Rank</th>
                                 <th>NAMA</th>
                                 <th>DIVISI</th>
                             </tr>

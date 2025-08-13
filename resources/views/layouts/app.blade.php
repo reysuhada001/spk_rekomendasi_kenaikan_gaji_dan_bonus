@@ -39,33 +39,63 @@
                                 <a class="nav-link dropdown-toggle hide-arrow" href="javascript:void(0);"
                                     data-bs-toggle="dropdown">
                                     <div class="avatar avatar-online">
-                                        <img src="{{ asset('assets/img/user.png') }}" alt
-                                            class="w-px-40 rounded-circle h-auto" />
+                                        <img src="{{ Auth::check() && Auth::user()->photo
+                                            ? asset('storage/' . ltrim(Auth::user()->photo, '/'))
+                                            : asset('assets/img/user.png') }}"
+                                            alt="{{ Auth::check() ? Auth::user()->nama : 'User' }}"
+                                            class="rounded-circle"
+                                            style="width: 40px; height: 40px; object-fit: cover;" />
                                     </div>
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end">
+                                    <!-- Header Profile -->
+                                    <li>
+                                        <div class="d-flex align-items-center px-3 py-2">
+                                            <div class="avatar avatar-online me-2">
+                                                <img src="{{ Auth::check() && Auth::user()->photo
+                                                    ? asset('storage/' . ltrim(Auth::user()->photo, '/'))
+                                                    : asset('assets/img/user.png') }}"
+                                                    alt="{{ Auth::check() ? Auth::user()->nama : 'User' }}"
+                                                    style="width: 40px; height: 40px; object-fit: cover;"
+                                                    class="rounded-circle" />
+                                            </div>
+                                            <div>
+                                                <h6 class="mb-0">{{ Auth::user()->full_name ?? 'User' }}</h6>
+                                                <small
+                                                    class="text-muted">{{ ucfirst(Auth::user()->role ?? 'Role') }}</small>
+                                            </div>
+                                        </div>
+                                    </li>
+
+                                    <li>
+                                        <div class="dropdown-divider my-1"></div>
+                                    </li>
+
+                                    <!-- Link ke Profil -->
                                     <li>
                                         <a class="dropdown-item" href="#">
-                                            <div class="d-flex">
-                                                <div class="flex-grow-1">
-                                                    <span class="fw-semibold d-block">{{ Auth::user()->nama }}</span>
-                                                </div>
-                                            </div>
+                                            <i class="bx bx-user me-2"></i>
+                                            <span>My Profile</span>
                                         </a>
                                     </li>
+
                                     <li>
-                                        <div class="dropdown-divider"></div>
+                                        <div class="dropdown-divider my-1"></div>
                                     </li>
+
+                                    <!-- Logout -->
                                     <li>
-                                        <form action="{{ route('logout') }}" method="POST">
+                                        <form action="{{ route('logout') }}" method="POST" class="m-0">
                                             @csrf
-                                            <button class="btn btn-sm btn-outline-secondary" type="submit">
-                                                <i class="bx bx-log-out"></i> Logout
+                                            <button type="submit" class="dropdown-item text-danger">
+                                                <i class="bx bx-log-out me-2"></i>
+                                                <span>Logout</span>
                                             </button>
                                         </form>
                                     </li>
                                 </ul>
                             </li>
+
                             <!--/ User -->
                         </ul>
                     </div>

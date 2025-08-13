@@ -32,7 +32,7 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 });
 
-Route::get('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
+Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware('auth')
@@ -217,7 +217,7 @@ Route::get('/kpi-divisi/skor', [KpiDivisiSkorKaryawanController::class, 'index']
     ->middleware(['auth','role:owner,hr,leader,karyawan'])
     ->name('kpi-divisi.skor-karyawan.index');
 
-Route::middleware(['auth','role:owner,hr,leader'])->group(function () {
+Route::middleware(['auth','role:owner,hr,leader,karyawan'])->group(function () {
     Route::get('/kpi-divisi/skor-divisi', [KpiDivisiSkorDivisiController::class,'index'])
         ->name('kpi-divisi.skor-divisi.index');
 });
