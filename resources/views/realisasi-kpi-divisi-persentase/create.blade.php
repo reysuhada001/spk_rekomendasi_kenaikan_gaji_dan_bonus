@@ -63,22 +63,31 @@
     <script>
         const target = {{ (float) $kpi->target }};
 
+        // Preview harus match backend: CAP 200 ketika real >= target
         function fuzzyScorePercentage(real, t) {
             const eps = 1e-9;
             real = parseFloat(real || 0);
             t = parseFloat(t || 0);
-            if (t <= 0) return real <= 0 ? 100 : 150;
-            if (real >= t) return Math.round((100 * (real / t)) * 100) / 100;
+
+            if (t <= 0) return real <= 0 ? 100 : Math.min(150, 200);
+
+            if (real >= t) {
+                const lin = 100 * (real / Math.max(t, eps));
+                return Math.round(Math.min(lin, 200) * 100) / 100; // CAP 200
+            }
+
             const x = Math.max(0, Math.min(1, real / Math.max(t, eps)));
             let muL = 0,
                 muM = 0,
                 muH = 0;
             if (x <= 0.3) muL = 1;
             else if (x <= 0.6) muL = (0.6 - x) / (0.6 - 0.3 + 1e-9);
-            else muL = 0;
+
             if (x > 0.4 && x <= 0.6) muM = (x - 0.4) / (0.6 - 0.4 + 1e-9);
             else if (x > 0.6 && x <= 0.8) muM = (0.8 - x) / (0.8 - 0.6 + 1e-9);
+
             if (x > 0.7 && x <= 1.0) muH = (x - 0.7) / (1.0 - 0.7 + 1e-9);
+
             const wL = 60,
                 wM = 85,
                 wH = 98,

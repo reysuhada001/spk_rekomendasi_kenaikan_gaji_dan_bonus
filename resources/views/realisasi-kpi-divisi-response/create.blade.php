@@ -67,28 +67,36 @@
             const eps = 1e-9;
             r = parseFloat(r || 0);
             t = parseFloat(t || 0);
-            if (t <= 0) return r <= 0 ? 100 : 50;
+
+            if (t <= 0) return 0;
+
             if (r <= t) {
-                return Math.round((100 * (t / Math.max(r, eps))) * 100) / 100; // >= 100
+                const v = 100 * (t / Math.max(r, eps));
+                return Math.round(Math.min(200, v) * 100) / 100;
             }
-            // r > t: fuzzy menurun berdasarkan x = t/r ∈ (0,1)
+
             const x = Math.max(0, Math.min(1, t / Math.max(r, eps)));
-            // near (0.7..1), med (0.4..0.8), far (<=0.6)
-            let muN = 0,
+            let muL = 0,
                 muM = 0,
-                muF = 0;
-            if (x > 0.7 && x <= 1.0) muN = (x - 0.7) / (1.0 - 0.7 + 1e-9);
-            if (x > 0.4 && x <= 0.6) muM = (x - 0.4) / (0.6 - 0.4 + 1e-9);
-            else if (x > 0.6 && x <= 0.8) muM = (0.8 - x) / (0.8 - 0.6 + 1e-9);
-            if (x <= 0.3) muF = 1;
-            else if (x > 0.3 && x <= 0.6) muF = (0.6 - x) / (0.6 - 0.3 + 1e-9);
-            const wN = 95,
+                muH = 0;
+
+            if (x <= 0.3) muL = 1.0;
+            else if (x <= 0.6) muL = (0.6 - x) / (0.6 - 0.3 + eps);
+
+            if (x <= 0.4) muM = (x - 0.1) / (0.4 - 0.1 + eps);
+            else if (x <= 0.8) muM = (0.8 - x) / (0.8 - 0.4 + eps);
+            muM = Math.max(0, Math.min(1, muM));
+
+            if (x <= 0.6) muH = 0;
+            else if (x <= 0.9) muH = (x - 0.6) / (0.9 - 0.6 + eps);
+            else muH = 1.0;
+
+            const wL = 50,
                 wM = 80,
-                wF = 50;
-            const den = muN + muM + muF;
-            if (den <= 0) return 50;
-            const s = (muN * wN + muM * wM + muF * wF) / den;
-            return Math.round(s * 100) / 100;
+                wH = 95;
+            const den = muL + muM + muH;
+            if (den <= 0) return 0;
+            return Math.round(((muL * wL + muM * wM + muH * wH) / den) * 100) / 100;
         }
 
         function refresh() {

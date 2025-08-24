@@ -121,7 +121,7 @@
                                 <script>
                                     document.write(new Date().getFullYear());
                                 </script>
-                                , <i><b>Universitas Catur Insan Cendekia</b></i>
+                                , <i><b>Raihan Achmad Suhada</b></i>
                             </div>
                         </div>
                     </footer>

@@ -32,7 +32,6 @@
                     {{-- Filter --}}
                     <form method="GET" action="{{ route('realisasi-kpi-divisi-response.index') }}"
                         class="d-flex align-items-center ms-auto flex-wrap gap-2">
-                        {{-- Persist per_page saat filter --}}
                         <input type="hidden" name="per_page" value="{{ $perPage }}">
 
                         <div class="input-group input-group-sm" style="width: 200px;">
@@ -121,13 +120,12 @@
                                         <td>{{ $tahun ?? '-' }}</td>
                                         <td class="text-end">
                                             @if ($r && $r->status === 'approved')
-                                                {{ rtrim(rtrim(number_format(round($r->total_score, 2), 2, '.', ''), '0'), '.') }}%
+                                                {{ rtrim(rtrim(number_format(round($r->total_score, 2), 2, '.', ''), '0'), '.') }}
                                             @else
                                                 -
                                             @endif
                                         </td>
                                         <td>
-                                            {{-- ICON-ONLY + info di samping (nowrap) --}}
                                             @if ($me->role === 'leader')
                                                 @if ($needsReinput)
                                                     <div class="d-flex align-items-center flex-nowrap gap-2">
@@ -138,7 +136,6 @@
                                                             <i class="bx bx-edit"></i>
                                                         </a>
 
-                                                        {{-- Keterangan di samping ikon --}}
                                                         @if ($r && $r->status === 'stale')
                                                             <small class="text-warning d-flex align-items-center"
                                                                 style="white-space: nowrap;">
@@ -176,7 +173,6 @@
                                                     <span class="text-muted">-</span>
                                                 @endif
                                             @else
-                                                {{-- karyawan --}}
                                                 @if ($me->id === $u->id && $r)
                                                     <a class="btn btn-icon btn-sm btn-outline-secondary"
                                                         href="{{ route('realisasi-kpi-divisi-response.show', $r->id) }}"
@@ -227,7 +223,7 @@
     <script>
         const Toast = Swal.mixin({
             toast: true,
-            position: 'top-end',
+            position: 'bottom-end',
             showConfirmButton: false,
             timer: 2500,
             timerProgressBar: true

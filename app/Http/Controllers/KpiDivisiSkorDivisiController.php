@@ -32,7 +32,7 @@ class KpiDivisiSkorDivisiController extends Controller
         $tahun       = $request->filled('tahun') ? (int)$request->tahun : null;
         $division_id = $request->filled('division_id') ? (int)$request->division_id : null;
 
-        // Semua role boleh akses & melihat semua divisi (opsional bisa difilter)
+        // Semua role boleh akses; dropdown semua divisi untuk filter
         $divisionsAll = Division::orderBy('name')->get();
 
         // Jika belum pilih periode -> kosong
@@ -52,156 +52,151 @@ class KpiDivisiSkorDivisiController extends Controller
             ]);
         }
 
-        // Query divisi sesuai filter pencarian/divisi
+        // Query divisi sesuai filter
         $divQ = Division::query();
-        if (!empty($division_id)) {
-            $divQ->where('id', $division_id);
-        }
-        if ($search !== '') {
-            $divQ->where('name', 'like', "%{$search}%");
-        }
-
+        if (!empty($division_id)) $divQ->where('id', $division_id);
+        if ($search !== '')       $divQ->where('name', 'like', "%{$search}%");
         $divisions = $divQ->orderBy('name')->paginate($perPage)->appends($request->all());
 
         $rows = [];
+
         foreach ($divisions as $div) {
             $divisionId = $div->id;
 
+            // Ambil semua KPI divisi (semua tipe) untuk periode ini
             $allKpis = KpiDivisi::where('division_id', $divisionId)
                 ->where('bulan', $bulan)
                 ->where('tahun', $tahun)
                 ->get();
 
+            // Peta bobot KPI (as-is). Jika semua 0/null, fallback rata.
+            $kpiWeight = [];
+            foreach ($allKpis as $kpi) {
+                $kpiWeight[$kpi->id] = (float)($kpi->bobot ?? 0);
+            }
+            $totalW = array_sum($kpiWeight);
+            if ($totalW <= 0 && count($kpiWeight) > 0) {
+                $eq = 1.0 / count($kpiWeight);
+                foreach ($kpiWeight as $id => $_) $kpiWeight[$id] = $eq;
+            }
+
+            // Kelompok KPI per tipe (untuk memudahkan)
             $kpisByType = [
-                'kuantitatif' => $allKpis->where('tipe','kuantitatif')->values(),
-                'kualitatif'  => $allKpis->where('tipe','kualitatif')->values(),
-                'response'    => $allKpis->where('tipe','response')->values(),
-                'persentase'  => $allKpis->where('tipe','persentase')->values(),
+                'kuantitatif' => $allKpis->where('tipe','kuantitatif')->pluck('id')->all(),
+                'kualitatif'  => $allKpis->where('tipe','kualitatif' )->pluck('id')->all(),
+                'response'    => $allKpis->where('tipe','response'   )->pluck('id')->all(),
+                'persentase'  => $allKpis->where('tipe','persentase' )->pluck('id')->all(),
             ];
 
-            // Normalisasi bobot AHP DI DALAM tiap tipe (fallback rata jika bobot kosong)
-            $kpiWeightInType = [];
-            foreach ($kpisByType as $t => $rowsKpi) {
-                $sum = (float) $rowsKpi->sum(fn($k)=> (float)($k->bobot ?? 0));
-                if ($sum > 0) {
-                    foreach ($rowsKpi as $kpi) {
-                        $kpiWeightInType[$t][$kpi->id] = ((float)$kpi->bobot) / $sum;
-                    }
-                } else {
-                    $n = $rowsKpi->count();
-                    if ($n > 0) {
-                        $eq = 1.0 / $n;
-                        foreach ($rowsKpi as $kpi) {
-                            $kpiWeightInType[$t][$kpi->id] = $eq;
-                        }
-                    }
-                }
-            }
-
-            // Ambil karyawan divisi ini
+            // Ambil semua karyawan divisi ini (yang berperan sebagai karyawan)
             $userIds = User::where('division_id', $divisionId)
                 ->where('role','karyawan')
-                ->pluck('id')
-                ->all();
+                ->pluck('id')->all();
 
-            // ========= KUANTITATIF =========
-            $qHdr = KpiDivisiKuantitatifRealization::where('division_id', $divisionId)
-                ->where('bulan', $bulan)
-                ->where('tahun', $tahun)
-                ->where('status', 'approved')
-                ->whereIn('user_id', $userIds)
-                ->get()
-                ->keyBy('user_id');
+            // ============ KUANTITATIF (Σ w_kpi * avg_user_score_per_kpi) ============
+            $scoreQ = null;
+            if (!empty($userIds) && !empty($kpisByType['kuantitatif'])) {
+                $qHdr = KpiDivisiKuantitatifRealization::where('division_id', $divisionId)
+                    ->where('bulan', $bulan)->where('tahun', $tahun)
+                    ->where('status', 'approved')
+                    ->whereIn('user_id', $userIds)
+                    ->get();
+                if ($qHdr->isNotEmpty()) {
+                    $qItems = KpiDivisiKuantitatifRealizationItem::whereIn('realization_id', $qHdr->pluck('id'))
+                        ->get();
 
-            $qItems = $qHdr->isNotEmpty()
-                ? KpiDivisiKuantitatifRealizationItem::whereIn('realization_id', $qHdr->pluck('id'))
-                    ->get()
-                    ->groupBy('realization_id')
-                : [];
+                    // Kumpulkan skor per KPI → rata-rata per KPI
+                    $agg = []; // [kpi_id => ['sum'=>..., 'n'=>...]]
+                    foreach ($qItems as $it) {
+                        $kpiId = (int)$it->kpi_divisi_id;
+                        if (!in_array($kpiId, $kpisByType['kuantitatif'], true)) continue;
+                        $sc = (float)($it->score ?? 0);
+                        if (!isset($agg[$kpiId])) $agg[$kpiId] = ['sum'=>0.0,'n'=>0];
+                        $agg[$kpiId]['sum'] += $sc;
+                        $agg[$kpiId]['n']   += 1;
+                    }
 
-            $perUserQ = [];
-            foreach ($qHdr as $uid => $hdr) {
-                $its = $qItems[$hdr->id] ?? collect();
-                if ($its->isEmpty()) continue;
-
-                $sum = 0.0; $has = false;
-                foreach ($its as $it) {
-                    $w = $kpiWeightInType['kuantitatif'][$it->kpi_divisi_id] ?? null;
-                    if ($w === null) continue;
-                    $sum += $w * (float) ($it->score ?? 0);
-                    $has = true;
+                    $sumWeighted = 0.0; $has = false;
+                    foreach ($agg as $kpiId => $st) {
+                        if ($st['n'] <= 0) continue;
+                        $avg = $st['sum'] / $st['n'];
+                        $w   = $kpiWeight[$kpiId] ?? 0.0;
+                        if ($w > 0) { $sumWeighted += $w * $avg; $has = true; }
+                    }
+                    if ($has) $scoreQ = round($sumWeighted, 2);
                 }
-                if ($has) $perUserQ[] = $sum;
             }
-            $scoreQ = count($perUserQ) ? round(array_sum($perUserQ) / count($perUserQ), 2) : null;
 
-            // ========= KUALITATIF =========
-            $kHdr = KpiDivisiKualitatifRealization::where('division_id', $divisionId)
-                ->where('bulan', $bulan)
-                ->where('tahun', $tahun)
-                ->where('status', 'approved')
-                ->whereIn('user_id', $userIds)
-                ->get()
-                ->keyBy('user_id');
+            // ============ KUALITATIF ============
+            $scoreK = null;
+            if (!empty($userIds) && !empty($kpisByType['kualitatif'])) {
+                $kHdr = KpiDivisiKualitatifRealization::where('division_id', $divisionId)
+                    ->where('bulan', $bulan)->where('tahun', $tahun)
+                    ->where('status', 'approved')
+                    ->whereIn('user_id', $userIds)
+                    ->get();
+                if ($kHdr->isNotEmpty()) {
+                    $kItems = KpiDivisiKualitatifRealizationItem::whereIn('realization_id', $kHdr->pluck('id'))
+                        ->get();
 
-            $kItems = $kHdr->isNotEmpty()
-                ? KpiDivisiKualitatifRealizationItem::whereIn('realization_id', $kHdr->pluck('id'))
-                    ->get()
-                    ->groupBy('realization_id')
-                : [];
+                    $agg = [];
+                    foreach ($kItems as $it) {
+                        $kpiId = (int)$it->kpi_divisi_id;
+                        if (!in_array($kpiId, $kpisByType['kualitatif'], true)) continue;
+                        $sc = (float)($it->score ?? 0);
+                        if (!isset($agg[$kpiId])) $agg[$kpiId] = ['sum'=>0.0,'n'=>0];
+                        $agg[$kpiId]['sum'] += $sc;
+                        $agg[$kpiId]['n']   += 1;
+                    }
 
-            $perUserK = [];
-            foreach ($kHdr as $uid => $hdr) {
-                $its = $kItems[$hdr->id] ?? collect();
-                if ($its->isEmpty()) continue;
-
-                $sum = 0.0; $has = false;
-                foreach ($its as $it) {
-                    $w = $kpiWeightInType['kualitatif'][$it->kpi_divisi_id] ?? null;
-                    if ($w === null) continue;
-                    $sum += $w * (float) ($it->score ?? 0);
-                    $has = true;
+                    $sumWeighted = 0.0; $has = false;
+                    foreach ($agg as $kpiId => $st) {
+                        if ($st['n'] <= 0) continue;
+                        $avg = $st['sum'] / $st['n'];
+                        $w   = $kpiWeight[$kpiId] ?? 0.0;
+                        if ($w > 0) { $sumWeighted += $w * $avg; $has = true; }
+                    }
+                    if ($has) $scoreK = round($sumWeighted, 2);
                 }
-                if ($has) $perUserK[] = $sum;
             }
-            $scoreK = count($perUserK) ? round(array_sum($perUserK) / count($perUserK), 2) : null;
 
-            // ========= RESPONSE =========
-            $rHdr = KpiDivisiResponseRealization::where('division_id', $divisionId)
-                ->where('bulan', $bulan)
-                ->where('tahun', $tahun)
-                ->where('status', 'approved')
-                ->whereIn('user_id', $userIds)
-                ->get()
-                ->keyBy('user_id');
+            // ============ RESPONSE ============
+            $scoreR = null;
+            if (!empty($userIds) && !empty($kpisByType['response'])) {
+                $rHdr = KpiDivisiResponseRealization::where('division_id', $divisionId)
+                    ->where('bulan', $bulan)->where('tahun', $tahun)
+                    ->where('status', 'approved')
+                    ->whereIn('user_id', $userIds)
+                    ->get();
+                if ($rHdr->isNotEmpty()) {
+                    $rItems = KpiDivisiResponseRealizationItem::whereIn('realization_id', $rHdr->pluck('id'))
+                        ->get();
 
-            $rItems = $rHdr->isNotEmpty()
-                ? KpiDivisiResponseRealizationItem::whereIn('realization_id', $rHdr->pluck('id'))
-                    ->get()
-                    ->groupBy('realization_id')
-                : [];
+                    $agg = [];
+                    foreach ($rItems as $it) {
+                        $kpiId = (int)$it->kpi_divisi_id;
+                        if (!in_array($kpiId, $kpisByType['response'], true)) continue;
+                        $sc = (float)($it->score ?? 0);
+                        if (!isset($agg[$kpiId])) $agg[$kpiId] = ['sum'=>0.0,'n'=>0];
+                        $agg[$kpiId]['sum'] += $sc;
+                        $agg[$kpiId]['n']   += 1;
+                    }
 
-            $perUserR = [];
-            foreach ($rHdr as $uid => $hdr) {
-                $its = $rItems[$hdr->id] ?? collect();
-                if ($its->isEmpty()) continue;
-
-                $sum = 0.0; $has = false;
-                foreach ($its as $it) {
-                    $w = $kpiWeightInType['response'][$it->kpi_divisi_id] ?? null;
-                    if ($w === null) continue;
-                    $sum += $w * (float) ($it->score ?? 0);
-                    $has = true;
+                    $sumWeighted = 0.0; $has = false;
+                    foreach ($agg as $kpiId => $st) {
+                        if ($st['n'] <= 0) continue;
+                        $avg = $st['sum'] / $st['n'];
+                        $w   = $kpiWeight[$kpiId] ?? 0.0;
+                        if ($w > 0) { $sumWeighted += $w * $avg; $has = true; }
+                    }
+                    if ($has) $scoreR = round($sumWeighted, 2);
                 }
-                if ($has) $perUserR[] = $sum;
             }
-            $scoreR = count($perUserR) ? round(array_sum($perUserR) / count($perUserR), 2) : null;
 
-            // ========= PERSENTASE (per KPI, approved) =========
+            // ============ PERSENTASE (per KPI, bukan per user) ============
             $scoreP = null;
-            if ($kpisByType['persentase']->count() > 0) {
-                $persIds  = $kpisByType['persentase']->pluck('id');
-                $persReal = KpiDivisiPersentaseRealization::whereIn('kpi_divisi_id', $persIds)
+            if (!empty($kpisByType['persentase'])) {
+                $persReal = KpiDivisiPersentaseRealization::whereIn('kpi_divisi_id', $kpisByType['persentase'])
                     ->where('division_id', $divisionId)
                     ->where('bulan', $bulan)
                     ->where('tahun', $tahun)
@@ -209,21 +204,22 @@ class KpiDivisiSkorDivisiController extends Controller
                     ->get()
                     ->keyBy('kpi_divisi_id');
 
-                if ($persReal->count() > 0) {
-                    $sum = 0.0; $has = false;
+                if ($persReal->isNotEmpty()) {
+                    $sumWeighted = 0.0; $has = false;
                     foreach ($persReal as $kpiId => $row) {
-                        $w = $kpiWeightInType['persentase'][$kpiId] ?? null;
-                        if ($w === null) continue;
-                        $sum += $w * (float) ($row->score ?? 0);
-                        $has = true;
+                        $w = $kpiWeight[$kpiId] ?? 0.0;
+                        $sc = (float)($row->score ?? 0);
+                        if ($w > 0) { $sumWeighted += $w * $sc; $has = true; }
                     }
-                    if ($has) $scoreP = round($sum, 2);
+                    if ($has) $scoreP = round($sumWeighted, 2);
                 }
             }
 
-            // Skor akhir per divisi = rata-rata sederhana dari tipe yang ADA
-            $parts = array_values(array_filter([$scoreQ, $scoreK, $scoreR, $scoreP], fn($v) => $v !== null));
-            $total = count($parts) ? round(array_sum($parts) / count($parts), 2) : null;
+            // ======== TOTAL = Σ (w_kpi × skor_kpi) lintas semua tipe ========
+            // Karena skor per-tipe sudah Σ(w_kpi × avg_score_kpi), total = jumlah keempat tipe.
+            $total = null;
+            $parts = array_filter([$scoreQ, $scoreK, $scoreR, $scoreP], fn($v) => $v !== null);
+            if (!empty($parts)) $total = round(array_sum($parts), 2);
 
             $rows[$divisionId] = [
                 'q'     => $scoreQ,

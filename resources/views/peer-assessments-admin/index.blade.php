@@ -32,7 +32,6 @@
                     {{-- Filter (kanan) --}}
                     <form method="GET" action="{{ route('peer.admin.index') }}"
                         class="d-flex align-items-center flex-wrap gap-2">
-                        {{-- persist per_page saat filter --}}
                         <input type="hidden" name="per_page" value="{{ request('per_page', 10) }}">
 
                         <div class="input-group input-group-sm" style="width:200px;">

@@ -20,8 +20,7 @@
                             <select name="per_page" class="form-select" onchange="this.form.submit()">
                                 @foreach ([10, 25, 50, 75, 100] as $pp)
                                     <option value="{{ $pp }}" {{ (int) $perPage === $pp ? 'selected' : '' }}>
-                                        {{ $pp }}
-                                    </option>
+                                        {{ $pp }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -31,7 +30,6 @@
                     {{-- Filter --}}
                     <form method="GET" action="{{ route('realisasi-kpi-divisi-kuantitatif.index') }}"
                         class="d-flex align-items-center ms-auto flex-wrap gap-2">
-                        {{-- Persist per_page saat filter --}}
                         <input type="hidden" name="per_page" value="{{ $perPage }}">
 
                         <div class="input-group input-group-sm" style="width: 200px;">
@@ -40,8 +38,7 @@
                                 <option value="" {{ is_null($bulan) ? 'selected' : '' }}>Pilih Bulan</option>
                                 @foreach ($bulanList as $num => $label)
                                     <option value="{{ $num }}"
-                                        {{ (string) $bulan === (string) $num ? 'selected' : '' }}>
-                                        {{ $label }}
+                                        {{ (string) $bulan === (string) $num ? 'selected' : '' }}>{{ $label }}
                                     </option>
                                 @endforeach
                             </select>
@@ -62,8 +59,7 @@
                                     @foreach ($divisions as $d)
                                         <option value="{{ $d->id }}"
                                             {{ (string) $division_id === (string) $d->id ? 'selected' : '' }}>
-                                            {{ $d->name }}
-                                        </option>
+                                            {{ $d->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -120,7 +116,7 @@
                                         <td>{{ $tahun ?? '-' }}</td>
                                         <td class="text-end">
                                             @if ($r && $r->status === 'approved')
-                                                {{ rtrim(rtrim(number_format(round($r->total_score, 2), 2, '.', ''), '0'), '.') }}%
+                                                {{ rtrim(rtrim(number_format(round($r->total_score, 2), 2, '.', ''), '0'), '.') }}
                                             @else
                                                 -
                                             @endif
@@ -137,7 +133,6 @@
                                                             <i class="bx bx-edit"></i>
                                                         </a>
 
-                                                        {{-- Keterangan di samping ikon --}}
                                                         @if ($r && $r->status === 'stale')
                                                             <small class="text-warning d-flex align-items-center"
                                                                 style="white-space: nowrap;">

@@ -16,17 +16,20 @@ class KpiDivisiPersentaseRealizationController extends Controller
         7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'
     ];
 
-    /** INDEX: daftar KPI Divisi tipe persentase per periode (bukan daftar karyawan) */
+    // CAP skor maksimum konsisten dengan modul lain (kuantitatif/response)
+    private float $MAX_SCORE = 200.0;
+
+    /** INDEX: daftar KPI Divisi tipe persentase per-periode (per divisi) */
     public function index(Request $request)
     {
-        $me      = Auth::user();
-        $perPage = (int) $request->input('per_page', 10);
-        $search  = $request->input('search', '');
-        $bulan   = $request->filled('bulan') ? (int)$request->bulan : null;
-        $tahun   = $request->filled('tahun') ? (int)$request->tahun : null;
+        $me          = Auth::user();
+        $perPage     = (int) $request->input('per_page', 10);
+        $search      = $request->input('search', '');
+        $bulan       = $request->filled('bulan') ? (int)$request->bulan : null;
+        $tahun       = $request->filled('tahun') ? (int)$request->tahun : null;
         $division_id = $request->filled('division_id') ? (int)$request->division_id : null;
 
-        // leader/karyawan: otomatis pakai divisi sendiri
+        // Leader/karyawan otomatis pakai divisi sendiri
         if (in_array($me->role, ['leader','karyawan'], true)) {
             $division_id = $me->division_id;
         }
@@ -44,6 +47,7 @@ class KpiDivisiPersentaseRealizationController extends Controller
             ]);
         }
 
+        // Ambil KPI persentase
         $kpis = KpiDivisi::with('division')
             ->where('tipe','persentase')
             ->where('bulan',$bulan)->where('tahun',$tahun)
@@ -52,10 +56,41 @@ class KpiDivisiPersentaseRealizationController extends Controller
             ->orderBy('nama')
             ->paginate($perPage)->appends($request->all());
 
+        // Ambil realisasi per KPI (keyed)
+        $kpiIds  = $kpis->pluck('id');
+        $kpiById = $kpis->keyBy('id');
+
         $realByKpi = KpiDivisiPersentaseRealization::where('bulan',$bulan)
             ->where('tahun',$tahun)
-            ->whereIn('kpi_divisi_id', $kpis->pluck('id'))
-            ->get()->keyBy('kpi_divisi_id');
+            ->whereIn('kpi_divisi_id', $kpiIds)
+            ->get()
+            ->keyBy('kpi_divisi_id');
+
+        // --- Guard: jika KPI berubah → tandai realisasi 'stale' & reset skor ---
+        foreach ($realByKpi as $kid => $real) {
+            $k = $kpiById[$kid] ?? null;
+            if (!$k) continue;
+
+            $changed = false;
+            if ((float)$real->target !== (float)$k->target) $changed = true;
+            if ((int)$real->division_id !== (int)$k->division_id) $changed = true;
+            if ((int)$real->bulan !== (int)$k->bulan || (int)$real->tahun !== (int)$k->tahun) $changed = true;
+            if ($k->updated_at && $real->updated_at && $k->updated_at->gt($real->updated_at)) {
+                $changed = true;
+            }
+
+            if ($changed && $real->status !== 'stale') {
+                $real->status   = 'stale';
+                $real->score    = null; // reset skor
+                $real->hr_note  = $real->hr_note ?: 'Perubahan data KPI. Leader wajib input ulang.';
+                $real->save();
+            }
+
+            // Sisipi info bobot & skor berbobot (ditampilkan hanya jika approved di Blade)
+            $w = (float) ($k->bobot ?? 1);
+            $real->weight         = $w;
+            $real->weighted_score = !is_null($real->score) ? round($real->score * $w, 2) : null;
+        }
 
         return view('realisasi-kpi-divisi-persentase.index', [
             'me'=>$me,'kpis'=>$kpis,'bulan'=>$bulan,'tahun'=>$tahun,'division_id'=>$division_id,
@@ -64,7 +99,7 @@ class KpiDivisiPersentaseRealizationController extends Controller
         ]);
     }
 
-    /** CREATE: Leader input sekali per KPI (periode ikut KPI) */
+    /** CREATE: Leader input sekali per KPI (periode mengikuti KPI) */
     public function create(Request $request)
     {
         $me = Auth::user();
@@ -100,7 +135,7 @@ class KpiDivisiPersentaseRealizationController extends Controller
 
         $target = (float)($kpi->target ?? 0);
         $real   = (float)$data['realization'];
-        $score  = $this->scorePercentage($real, $target);
+        $score  = $this->scorePercentage($real, $target); // skor mentah (%)
 
         DB::transaction(function () use ($kpi, $me, $target, $real, $score) {
             KpiDivisiPersentaseRealization::updateOrCreate(
@@ -111,7 +146,7 @@ class KpiDivisiPersentaseRealizationController extends Controller
                     'tahun'       => $kpi->tahun,
                     'target'      => $target,
                     'realization' => $real,
-                    'score'       => $score,
+                    'score'       => $score,   // simpan raw; weighted dihitung saat tampil
                     'status'      => 'submitted',
                     'hr_note'     => null,
                     'created_by'  => $me->id,
@@ -125,14 +160,37 @@ class KpiDivisiPersentaseRealizationController extends Controller
         ])->with('success','Realisasi KPI (persentase) diajukan. Menunggu verifikasi HR.');
     }
 
-    /** SHOW: Detail satu realisasi KPI persentase */
+    /** SHOW: Detail satu realisasi KPI persentase (menyertakan weighted) */
     public function show($id)
     {
-        $me = Auth::user();
+        $me   = Auth::user();
         $real = KpiDivisiPersentaseRealization::with('kpi','division')->findOrFail($id);
 
-        if ($me->role === 'leader' && $me->division_id !== $real->division_id) abort(403);
+        if ($me->role === 'leader'   && $me->division_id !== $real->division_id) abort(403);
         if ($me->role === 'karyawan' && $me->division_id !== $real->division_id) abort(403);
+
+        // Guard perubahan KPI → tandai stale & reset score bila perlu
+        if ($real->kpi) {
+            $k = $real->kpi;
+            $changed = false;
+
+            if ((float)$real->target !== (float)$k->target) $changed = true;
+            if ((int)$real->division_id !== (int)$k->division_id) $changed = true;
+            if ((int)$real->bulan !== (int)$k->bulan || (int)$real->tahun !== (int)$k->tahun) $changed = true;
+            if ($k->updated_at && $real->updated_at && $k->updated_at->gt($real->updated_at)) $changed = true;
+
+            if ($changed && $real->status !== 'stale') {
+                $real->update([
+                    'status'  => 'stale',
+                    'score'   => null,
+                    'hr_note' => $real->hr_note ?: 'Perubahan data KPI. Leader wajib input ulang.'
+                ]);
+            }
+        }
+
+        $weight = (float) ($real->kpi?->bobot ?? 1);
+        $real->weight = $weight;
+        $real->weighted_score = !is_null($real->score) ? round($real->score * $weight, 2) : null;
 
         return view('realisasi-kpi-divisi-persentase.show', [
             'me'=>$me,'real'=>$real,'bulanList'=>$this->bulanList
@@ -170,40 +228,33 @@ class KpiDivisiPersentaseRealizationController extends Controller
         return back()->with('success','Realisasi ditolak.');
     }
 
-    /** Skoring Persentase: lebih besar lebih baik; < target pakai fuzzy naik */
+    /** Skoring Persentase: >= target linear (cap 200); < target fuzzy naik */
     private function scorePercentage(float $real, float $target): float
     {
         $eps = 1e-9;
+
         if ($target <= 0) {
             if ($real <= 0) return 100.0;
-            return 150.0; // jika target 0 tapi ada realisasi >0 → kasih reward
+            return min(150.0, $this->MAX_SCORE); // reward tetap dibatasi
         }
 
         if ($real >= $target) {
-            // cap? biarkan >100 sesuai aturan kamu
-            $score = 100.0 * ($real / $target);
-            return round($score, 2);
+            $score = 100.0 * ($real / max($target, $eps));
+            return round(min($score, $this->MAX_SCORE), 2); // CAP 200
         }
 
-        // real < target → fuzzy naik.
-        $x = max(0.0, min(1.0, $real / max($target,$eps))); // 0..1 (proporsi tercapai)
-        // low (0..0.6), med (0.4..0.8 peak 0.6), high (0.7..1.0)
-        $muLow=0;$muMed=0;$muHigh=0;
+        // real < target → fuzzy naik (maks < 100 agar tidak menipu)
+        $x = max(0.0, min(1.0, $real / max($target,$eps))); // proporsi 0..1
 
+        $muLow=0.0; $muMed=0.0; $muHigh=0.0;
         if      ($x <= 0.3) $muLow = 1.0;
         elseif  ($x <= 0.6) $muLow = (0.6 - $x) / (0.6 - 0.3 + $eps);
-        else                $muLow = 0.0;
 
-        if      ($x <= 0.4) $muMed = 0.0;
-        elseif  ($x <= 0.6) $muMed = ($x - 0.4) / (0.6 - 0.4 + $eps);
-        elseif  ($x <= 0.8) $muMed = (0.8 - $x) / (0.8 - 0.6 + $eps);
-        else                $muMed = 0.0;
+        if      ($x > 0.4 && $x <= 0.6) $muMed = ($x - 0.4) / (0.6 - 0.4 + $eps);
+        elseif  ($x > 0.6 && $x <= 0.8) $muMed = (0.8 - $x) / (0.8 - 0.6 + $eps);
 
-        if      ($x <= 0.7) $muHigh = 0.0;
-        elseif  ($x <= 1.0) $muHigh = ($x - 0.7) / (1.0 - 0.7 + $eps);
-        else                $muHigh = 1.0;
+        if      ($x > 0.7 && $x <= 1.0) $muHigh = ($x - 0.7) / (1.0 - 0.7 + $eps);
 
-        // output weights
         $wLow=60; $wMed=85; $wHigh=98;
         $den = $muLow + $muMed + $muHigh;
         if ($den <= 0) return 60.0;

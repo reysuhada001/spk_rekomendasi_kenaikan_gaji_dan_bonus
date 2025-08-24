@@ -6,7 +6,7 @@
         @php $periodeText = ($bulanList[$bulan] ?? $bulan).' '.$tahun; @endphp
 
         {{-- Row 1: 2 Card --}}
-        <div class="row g-4">
+        <div class="row g-4">   
             {{-- Card 1: Top 5 Global --}}
             <div class="col-12 col-lg-6">
                 <div class="card h-100">

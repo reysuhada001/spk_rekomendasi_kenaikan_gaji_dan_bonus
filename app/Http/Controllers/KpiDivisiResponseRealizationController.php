@@ -67,6 +67,38 @@ class KpiDivisiResponseRealizationController extends Controller
             ->whereIn('user_id', $users->pluck('id'))
             ->get()->keyBy('user_id');
 
+        // ---- Guard KPI berubah -> tandai stale berdasarkan item vs KPI
+        if (!empty($division_id)) {
+            $realIds = $realByUser->pluck('id')->filter()->values();
+            if ($realIds->isNotEmpty()) {
+                $items = KpiDivisiResponseRealizationItem::whereIn('realization_id',$realIds)->get();
+                $kpiIds = $items->pluck('kpi_divisi_id')->unique()->values();
+                $kpiMap = KpiDivisi::whereIn('id',$kpiIds)->get()->keyBy('id');
+
+                $groupByReal = $items->groupBy('realization_id');
+                foreach ($realByUser as $uid => $hdr) {
+                    if (!$hdr) continue;
+                    $changed = false;
+                    foreach ($groupByReal[$hdr->id] ?? [] as $it) {
+                        $k = $kpiMap[$it->kpi_divisi_id] ?? null;
+                        if (!$k) { $changed = true; break; }
+                        if ((float)$k->target !== (float)$it->target) { $changed = true; break; }
+                        if ((int)$k->division_id !== (int)$hdr->division_id
+                            || (int)$k->bulan !== (int)$hdr->bulan
+                            || (int)$k->tahun !== (int)$hdr->tahun) { $changed = true; break; }
+                        if ($k->updated_at && $hdr->updated_at && $k->updated_at->gt($hdr->updated_at)) { $changed = true; break; }
+                    }
+                    if ($changed && $hdr->status !== 'stale') {
+                        $hdr->update([
+                            'status'=>'stale',
+                            'hr_note'=>$hdr->hr_note ?: 'Perubahan data KPI. Leader wajib input ulang.',
+                            'total_score'=>null
+                        ]);
+                    }
+                }
+            }
+        }
+
         return view('realisasi-kpi-divisi-response.index', [
             'me'=>$me,'users'=>$users,'bulan'=>$bulan,'tahun'=>$tahun,'division_id'=>$division_id,
             'divisions'=>$divisions,'bulanList'=>$this->bulanList,'perPage'=>$perPage,'search'=>$search,
@@ -152,7 +184,7 @@ class KpiDivisiResponseRealizationController extends Controller
         $rows = [];
         foreach ($kpis as $k) {
             $kpiId = $k->id;
-            $target = (float)$k->target;         // target waktu (lebih kecil lebih baik)
+            $target = (float)$k->target;         // lebih kecil lebih baik
             $realz  = isset($data['real'][$kpiId]) ? (float)$data['real'][$kpiId] : 0;
             $score  = $this->scoreResponse($realz, $target);
 
@@ -181,7 +213,7 @@ class KpiDivisiResponseRealizationController extends Controller
             foreach ($rows as $r) {
                 KpiDivisiResponseRealizationItem::create([
                     'realization_id'=>$real->id,
-                    'user_id'       =>$user->id, // << WAJIB
+                    'user_id'       =>$user->id,
                     'kpi_divisi_id' =>$r['kpi_divisi_id'],
                     'target'        =>$r['target'],
                     'realization'   =>$r['realization'],
@@ -206,6 +238,29 @@ class KpiDivisiResponseRealizationController extends Controller
         if ($me->role === 'karyawan' && $me->id !== $real->user_id) abort(403);
 
         $items = KpiDivisiResponseRealizationItem::where('realization_id',$real->id)->with('kpi')->get();
+
+        // Guard perubahan KPI vs item
+        if ($items->count() > 0) {
+            $kpiIds = $items->pluck('kpi_divisi_id');
+            $kpis   = KpiDivisi::whereIn('id',$kpiIds)->get()->keyBy('id');
+
+            $changed = false;
+            foreach ($items as $it) {
+                $k = $kpis[$it->kpi_divisi_id] ?? null;
+                if (!$k) { $changed = true; break; }
+                if ((float)$k->target !== (float)$it->target) { $changed = true; break; }
+                if ((int)$k->division_id !== (int)$real->division_id
+                    || (int)$k->bulan !== (int)$real->bulan
+                    || (int)$k->tahun !== (int)$real->tahun) { $changed = true; break; }
+                if ($k->updated_at && $real->updated_at && $k->updated_at->gt($real->updated_at)) { $changed = true; break; }
+            }
+            if ($changed && $real->status !== 'stale') {
+                $real->update([
+                    'status'=>'stale','hr_note'=>$real->hr_note ?: 'Perubahan data KPI. Leader wajib input ulang.',
+                    'total_score'=>null
+                ]);
+            }
+        }
 
         $kpiIds = $items->pluck('kpi_divisi_id');
         $kpis   = KpiDivisi::whereIn('id',$kpiIds)->get()->keyBy('id');
@@ -265,22 +320,18 @@ class KpiDivisiResponseRealizationController extends Controller
 
     private function scoreResponse(float $real, float $target): float
     {
-        if ($real <= 0 && $target > 0) return 200.0;
         if ($target <= 0) return 0.0;
 
-        // lebih cepat (real lebih kecil) => skor lebih besar
         if ($real <= $target) {
             return min(200.0, round(100.0 * ($target / max($real, 1e-9)), 2));
         }
 
-        // lebih lambat dari target → fuzzy di bawah 100, gunakan rasio target/real (0..1)
         $ratio = max(0.0, min(1.0, $target / $real));
         return round($this->fuzzyPenaltySlow($ratio), 2);
     }
 
     private function fuzzyPenaltySlow(float $x): float
     {
-        // Semakin kecil x (makin lambat), skor semakin turun.
         $muL = 0.0; $muM = 0.0; $muH = 0.0;
 
         if     ($x <= 0.3) $muL = 1.0;
@@ -300,5 +351,5 @@ class KpiDivisiResponseRealizationController extends Controller
         $den = $muL + $muM + $muH;
         if ($den <= 0) return 0.0;
         return ($muL*$wL + $muM*$wM + $muH*$wH) / $den;
-    }
+    }   
 }

@@ -71,6 +71,7 @@
                                 <span class="badge bg-label-danger">Rejected</span>
                             @endif
                         </span>
+
                         @if (!is_null($total) && $real->status !== 'stale')
                             <span>Total Skor (Σ w·s):
                                 <strong>{{ rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.') }}%</strong></span>
@@ -84,10 +85,12 @@
 
                     @if (auth()->user()->role === 'hr' && $real->status === 'submitted')
                         <div class="d-flex gap-2">
-                            <form method="POST"
+                            <form id="approveForm" method="POST"
                                 action="{{ route('realisasi-kpi-divisi-kualitatif.approve', $real->id) }}">
                                 @csrf
-                                <button type="submit" class="btn btn-success"><i class="bx bx-check me-1"></i> ACC</button>
+                                <button type="button" class="btn btn-success" onclick="approveReal()">
+                                    <i class="bx bx-check me-1"></i> ACC
+                                </button>
                             </form>
 
                             <button class="btn btn-danger" onclick="rejectReal()">Tolak</button>
@@ -107,6 +110,21 @@
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        function approveReal() {
+            Swal.fire({
+                title: 'ACC Realisasi?',
+                text: 'Pastikan data sudah benar. Tindakan ini akan mengesahkan realisasi KPI Divisi Kualitatif.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, ACC',
+                cancelButtonText: 'Batal'
+            }).then((res) => {
+                if (res.isConfirmed) {
+                    document.getElementById('approveForm').submit();
+                }
+            });
+        }
+
         function rejectReal() {
             Swal.fire({
                 title: 'Alasan Penolakan',

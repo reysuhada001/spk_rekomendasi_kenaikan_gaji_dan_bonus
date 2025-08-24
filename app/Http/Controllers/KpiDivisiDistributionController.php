@@ -121,16 +121,35 @@ class KpiDivisiDistributionController extends Controller
         $sum = 0.0; $rows = [];
         foreach ($data['alloc'] as $userId => $val) {
             if (!isset($validMap[(int)$userId])) continue;
-            $v = (float)($val ?? 0);
+            $v = max(0.0, (float)($val ?? 0)); // non-negatif
             $sum += $v;
             $rows[] = ['user_id'=>(int)$userId, 'target'=>$v];
         }
 
-        if (abs($sum - (float)$kpi->target) > 0.0001) {
-            return back()->with('error','Total alokasi harus sama dengan target KPI.')->withInput();
+        // --- auto-normalize ke target KPI ---
+        $targetTotal = (float)$kpi->target;
+        if ($targetTotal > 0) {
+            if ($sum <= 0) {
+                return back()->with('error','Total alokasi harus > 0.')->withInput();
+            }
+            if (abs($sum - $targetTotal) > 0.0001) {
+                $scale = $targetTotal / $sum;
+                foreach ($rows as &$r) $r['target'] = round($r['target'] * $scale, 4);
+                unset($r);
+                // rapikan selisih rounding ke baris terakhir (atau baris pertama bila semuanya nol)
+                $diff = $targetTotal - array_sum(array_column($rows,'target'));
+                for ($i = count($rows)-1; $i >= 0; $i--) {
+                    if ($rows[$i]['target'] > 0 || $i === 0) { $rows[$i]['target'] += $diff; break; }
+                }
+            }
+        } else {
+            // targetTotal = 0 → paksa semua 0
+            foreach ($rows as &$r) $r['target'] = 0.0;
+            unset($r);
         }
 
         DB::transaction(function() use ($kpi, $me, $rows) {
+            // Set kembali ke submitted saat revisi
             $dist = KpiDivisiDistribution::updateOrCreate(
                 ['division_id'=>$kpi->division_id,'bulan'=>$kpi->bulan,'tahun'=>$kpi->tahun],
                 ['status'=>'submitted','hr_note'=>null,'created_by'=>$me->id]

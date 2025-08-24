@@ -82,7 +82,7 @@ class PeerAssessmentController extends Controller
 
         $bulan = (int)$data['bulan']; $tahun = (int)$data['tahun'];
 
-        // ❌ Kunci: jika sudah ada assessment, jangan boleh dibuka lagi
+        // Jika sudah ada assessment, jangan boleh dibuka lagi
         $already = PeerAssessment::where([
             'assessor_id'=>$me->id, 'assessee_id'=>$assessee->id,
             'bulan'=>$bulan, 'tahun'=>$tahun,
@@ -101,7 +101,7 @@ class PeerAssessmentController extends Controller
                 ->with('error','Belum ada aspek untuk periode tersebut.');
         }
 
-        // tidak ada prefill lagi karena tidak boleh ubah
+        // tidak ada prefill (karena tidak boleh ubah setelah submit)
         $existing = [];
         $scale = $this->scaleOptions();
 
@@ -128,18 +128,17 @@ class PeerAssessmentController extends Controller
 
         $bulan = (int)$data['bulan']; $tahun = (int)$data['tahun'];
 
-        // ❌ Kunci: kalau sudah ada record, tolak (tidak overwrite)
+        // kalau sudah ada record, tolak (tidak overwrite)
         $exists = PeerAssessment::where([
             'assessor_id'=>$me->id, 'assessee_id'=>$assessee->id,
             'bulan'=>$bulan, 'tahun'=>$tahun,
         ])->first();
-
         if ($exists) {
             return redirect()->route('peer.index', ['bulan'=>$bulan,'tahun'=>$tahun])
                 ->with('error','Penilaian sudah terkirim dan tidak dapat diubah.');
         }
 
-        // Validasi aspek
+        // Validasi aspek periode ini
         $aspekIds = Aspek::where('bulan',$bulan)->where('tahun',$tahun)->pluck('id')->toArray();
         if (empty($aspekIds)) return back()->with('error','Aspek periode ini belum ada.')->withInput();
 
@@ -153,7 +152,6 @@ class PeerAssessmentController extends Controller
         if (empty($rows)) return back()->with('error','Tidak ada skor yang dikirim.')->withInput();
 
         DB::transaction(function() use ($me,$assessee,$bulan,$tahun,$rows) {
-            // Buat assessment baru (tidak overwrite)
             $assessment = PeerAssessment::create([
                 'assessor_id' => $me->id,
                 'assessee_id' => $assessee->id,

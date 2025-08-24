@@ -69,7 +69,7 @@
                                         {{ rtrim(rtrim(number_format($it->realisasi, 2, '.', ''), '0'), '.') }}
                                     </td>
                                     <td class="text-end">
-                                        {{ rtrim(rtrim(number_format(round($it->score, 2), 2, '.', ''), '0'), '.') }}%</td>
+                                        {{ rtrim(rtrim(number_format(round($it->score, 2), 2, '.', ''), '0'), '.') }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -154,5 +154,27 @@
                 title: @json(session('error'))
             });
         @endif
+        function rejectReal() {
+            Swal.fire({
+                title: 'Alasan Penolakan',
+                input: 'textarea',
+                inputPlaceholder: 'Tuliskan alasan...',
+                showCancelButton: true,
+                confirmButtonText: 'Tolak',
+                cancelButtonText: 'Batal'
+            }).then(res => {
+                if (res.isConfirmed && res.value) {
+                    document.getElementById('hr_note').value = res.value;
+                    document.getElementById('rejectForm').submit();
+                } else if (res.isConfirmed) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Alasan wajib diisi',
+                        timer: 1800,
+                        showConfirmButton: false
+                    });
+                }
+            });
+        }
     </script>
 @endpush

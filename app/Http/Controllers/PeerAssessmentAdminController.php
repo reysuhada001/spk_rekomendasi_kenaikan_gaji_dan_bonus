@@ -8,7 +8,6 @@ use App\Models\Aspek;
 use App\Models\PeerAssessment;
 use App\Models\PeerAssessmentItem;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class PeerAssessmentAdminController extends Controller
@@ -34,7 +33,6 @@ class PeerAssessmentAdminController extends Controller
 
         $divisions = Division::orderBy('name')->get();
 
-        // Bila belum pilih bulan/tahun → kosong
         if (is_null($bulan) || is_null($tahun)) {
             $users = User::whereRaw('1=0')->paginate($perPage);
             return view('peer-assessments-admin.index', [
@@ -57,14 +55,20 @@ class PeerAssessmentAdminController extends Controller
 
         $users = $usersQ->paginate($perPage)->appends($request->all());
 
-        // Ambil rata-rata total per user (diterima) di periode
-        $avgByUser = PeerAssessment::select('assessee_id',
+        $avgQuery = PeerAssessment::select('peer_assessments.assessee_id',
                 DB::raw('AVG(peer_assessment_items.score) as avg_score'))
             ->join('peer_assessment_items','peer_assessments.id','=','peer_assessment_items.assessment_id')
+            ->join('users as assessee','assessee.id','=','peer_assessments.assessee_id')
             ->where('peer_assessments.bulan',$bulan)
-            ->where('peer_assessments.tahun',$tahun)
-            ->groupBy('assessee_id')
-            ->pluck('avg_score','assessee_id');
+            ->where('peer_assessments.tahun',$tahun);
+
+        if (!empty($division_id)) {
+            $avgQuery->where('assessee.division_id', $division_id);
+        }
+
+        $avgByUser = $avgQuery
+            ->groupBy('peer_assessments.assessee_id')
+            ->pluck('avg_score','peer_assessments.assessee_id');
 
         return view('peer-assessments-admin.index', compact(
             'users','bulan','tahun','division_id','divisions','perPage','search'
@@ -73,48 +77,91 @@ class PeerAssessmentAdminController extends Controller
 
     public function show(Request $request, $userId)
     {
-        $bulan = $request->validate(['bulan'=>'required|integer|min:1|max:12'])['bulan'];
-        $tahun = $request->validate(['tahun'=>'required|integer|min:2000|max:2100'])['tahun'];
+        $validated = $request->validate([
+            'bulan'=>'required|integer|min:1|max:12',
+            'tahun'=>'required|integer|min:2000|max:2100'
+        ]);
+        $bulan = (int)$validated['bulan'];
+        $tahun = (int)$validated['tahun'];
 
         $user = User::with('division')->findOrFail($userId);
 
         $assessments = PeerAssessment::with(['assessor'])
             ->where('assessee_id',$user->id)
             ->where('bulan',$bulan)->where('tahun',$tahun)
-            ->orderBy('assessor_id')->get();
+            ->orderBy('assessor_id')
+            ->get();
 
-        $aspeks = Aspek::where('bulan',$bulan)->where('tahun',$tahun)->orderBy('nama')->get();
-        $aspekIds = $aspeks->pluck('id')->all();
+        // Normalizer untuk nama aspek → key stabil
+        $norm = function (?string $s): string {
+            $s = preg_replace('/\s+/', ' ', trim($s ?? ''));
+            return strtolower($s);
+        };
 
-        // Map nilai: [assessment_id][aspek_id] = score
-        $items = PeerAssessmentItem::whereIn('assessment_id',$assessments->pluck('id'))
-            ->get()->groupBy('assessment_id');
+        // Item + nama aspeknya
+        $items = PeerAssessmentItem::whereIn('assessment_id', $assessments->pluck('id'))
+            ->with('aspek:id,nama')
+            ->get();
 
-        // Rata-rata per aspek & overall
-        $sumPerAspek = array_fill_keys($aspekIds, 0);
-        $countPerAspek = array_fill_keys($aspekIds, 0);
-        $totalSum = 0; $totalCount = 0;
+        // Matrix skor per assessment menggunakan key nama
+        $itemsMatrix = [];            // [assessment_id][keyNama] = score
+        $nameByKey   = [];            // [keyNama] => Label tampilan
+        foreach ($items as $it) {
+            $label = $it->aspek->nama ?? ('Aspek #'.$it->aspek_id);
+            $key   = $norm($label);
+            $itemsMatrix[$it->assessment_id][$key] = (int) $it->score;
+            if (!isset($nameByKey[$key])) $nameByKey[$key] = $label;
+        }
 
-        foreach ($assessments as $a) {
-            foreach (($items[$a->id] ?? collect()) as $it) {
-                $sumPerAspek[$it->aspek_id] += (int)$it->score;
-                $countPerAspek[$it->aspek_id] += 1;
-                $totalSum += (int)$it->score;
-                $totalCount += 1;
+        // Aspek yang didefinisikan pada periode ini → diprioritaskan urutannya
+        $periodAspeks = Aspek::where('bulan',$bulan)->where('tahun',$tahun)->orderBy('nama')->get();
+
+        // Susun kolom: mulai dari aspek periode (urut), lalu tambahkan yang belum ada dari item
+        $columns = [];  // [['key'=>..., 'label'=>...], ...]
+        $seen = [];
+        foreach ($periodAspeks as $a) {
+            $k = $norm($a->nama);
+            $columns[] = ['key'=>$k, 'label'=>$a->nama];
+            $seen[$k] = true;
+            // samakan label resmi
+            $nameByKey[$k] = $a->nama;
+        }
+        foreach ($nameByKey as $k => $label) {
+            if (!isset($seen[$k])) {
+                $columns[] = ['key'=>$k, 'label'=>$label];
+                $seen[$k] = true;
             }
         }
 
-        $avgPerAspek = [];
-        foreach ($aspekIds as $aid) {
-            $avgPerAspek[$aid] = $countPerAspek[$aid] > 0 ? round($sumPerAspek[$aid] / $countPerAspek[$aid], 2) : null;
+        // Agregasi rata-rata
+        $sumPer = []; $cntPer = [];
+        $totalSum = 0; $totalCnt = 0;
+        foreach ($assessments as $a) {
+            $row = $itemsMatrix[$a->id] ?? [];
+            foreach ($row as $k => $score) {
+                if (!isset($sumPer[$k])) { $sumPer[$k]=0; $cntPer[$k]=0; }
+                $sumPer[$k] += (int)$score;  $cntPer[$k] += 1;
+                $totalSum   += (int)$score;  $totalCnt   += 1;
+            }
         }
-        $avgTotal = $totalCount > 0 ? round($totalSum / $totalCount, 2) : null;
+
+        $avgPerKey = [];
+        foreach ($columns as $c) {
+            $k = $c['key'];
+            $avgPerKey[$k] = (!empty($cntPer[$k])) ? round($sumPer[$k] / $cntPer[$k], 2) : null;
+        }
+        $avgTotal = $totalCnt > 0 ? round($totalSum / $totalCnt, 2) : null;
 
         return view('peer-assessments-admin.show', [
-            'user'=>$user,'bulan'=>$bulan,'tahun'=>$tahun,
-            'assessments'=>$assessments,'aspeks'=>$aspeks,'items'=>$items,
-            'avgPerAspek'=>$avgPerAspek,'avgTotal'=>$avgTotal,
-            'bulanList'=>$this->bulanList
+            'user'        => $user,
+            'bulan'       => $bulan,
+            'tahun'       => $tahun,
+            'assessments' => $assessments,
+            'columns'     => $columns,
+            'itemsMatrix' => $itemsMatrix,
+            'avgPerKey'   => $avgPerKey,
+            'avgTotal'    => $avgTotal,
+            'bulanList'   => $this->bulanList,
         ]);
     }
 }

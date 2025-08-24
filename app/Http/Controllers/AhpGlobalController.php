@@ -36,117 +36,131 @@ class AhpGlobalController extends Controller
             'peer'       => 'Penilaian Karyawan (Peer)',
         ];
 
-        // Ambil satu baris konfigurasi global (jika belum ada, biarkan null)
-        $existing = AhpGlobalWeight::query()->orderBy('id','desc')->first();
+        // Ambil bobot tersimpan (jika ada)
+        $existing = AhpGlobalWeight::query()->orderBy('id', 'desc')->first();
 
-        // Pairs untuk 3 kriteria: (A,B), (A,C), (B,C)
+        /**
+         * Urutan pair di UI DISESUAIKAN agar kiri > kanan mengikuti
+         * hierarki: KPI Divisi > KPI Umum > Peer
+         * Sehingga user cukup memilih 1..9 (tanpa nilai kebalikan).
+         */
         $pairs = [
-            ['kpi_umum',   'kpi_divisi'],
-            ['kpi_umum',   'peer'],
-            ['kpi_divisi', 'peer'],
+            ['kpi_divisi', 'kpi_umum'],   // Divisi lebih penting dari Umum
+            ['kpi_umum',   'peer'],       // Umum lebih penting dari Peer
+            ['kpi_divisi', 'peer'],       // Divisi lebih penting dari Peer
         ];
 
         return view('ahp-global.index', [
-            'criteria'=>$criteria,
-            'pairs'=>$pairs,
-            'saatyOptions'=>$this->saatyOptions,
-            'existing'=>$existing,
-            'me'=>Auth::user(),
+            'criteria'     => $criteria,
+            'pairs'        => $pairs,
+            'saatyOptions' => $this->saatyOptions,
+            'existing'     => $existing,
+            'me'           => Auth::user(),
         ]);
     }
 
     public function hitung(Request $request)
     {
+        // Validasi sesuai name di view (urutan pair disesuaikan)
         $validated = $request->validate([
-            'pair_kpi_umum_kpi_divisi' => 'required|in:1,2,3,4,5,6,7,8,9',
+            'pair_kpi_divisi_kpi_umum' => 'required|in:1,2,3,4,5,6,7,8,9',
             'pair_kpi_umum_peer'       => 'required|in:1,2,3,4,5,6,7,8,9',
             'pair_kpi_divisi_peer'     => 'required|in:1,2,3,4,5,6,7,8,9',
         ]);
 
         // index kriteria
-        $idx = ['kpi_umum'=>0,'kpi_divisi'=>1,'peer'=>2];
+        $idx = ['kpi_umum' => 0, 'kpi_divisi' => 1, 'peer' => 2];
         $n = 3;
 
-        // Matriks perbandingan 3x3
-        $A = array_fill(0,$n,array_fill(0,$n,1.0));
+        // Matriks perbandingan 3x3 (diagonal 1)
+        $A = array_fill(0, $n, array_fill(0, $n, 1.0));
 
-        $val = fn($key) => (float)$validated[$key];
+        // Helper ambil nilai float
+        $f = fn ($k) => (float) $validated[$k];
 
-        $A[$idx['kpi_umum']][$idx['kpi_divisi']] = $val('pair_kpi_umum_kpi_divisi');
-        $A[$idx['kpi_divisi']][$idx['kpi_umum']] = 1.0 / $A[$idx['kpi_umum']][$idx['kpi_divisi']];
+        // --- mapping pair ke matriks ---
+        // pair: (kiri > kanan), input 1..9, sisi sebaliknya otomatis 1/nilai
+        // 1) KPI Divisi vs KPI Umum
+        $A[$idx['kpi_divisi']][$idx['kpi_umum']] = $f('pair_kpi_divisi_kpi_umum');
+        $A[$idx['kpi_umum']][$idx['kpi_divisi']] = 1.0 / $A[$idx['kpi_divisi']][$idx['kpi_umum']];
 
-        $A[$idx['kpi_umum']][$idx['peer']] = $val('pair_kpi_umum_peer');
+        // 2) KPI Umum vs Peer
+        $A[$idx['kpi_umum']][$idx['peer']] = $f('pair_kpi_umum_peer');
         $A[$idx['peer']][$idx['kpi_umum']] = 1.0 / $A[$idx['kpi_umum']][$idx['peer']];
 
-        $A[$idx['kpi_divisi']][$idx['peer']] = $val('pair_kpi_divisi_peer');
+        // 3) KPI Divisi vs Peer
+        $A[$idx['kpi_divisi']][$idx['peer']] = $f('pair_kpi_divisi_peer');
         $A[$idx['peer']][$idx['kpi_divisi']] = 1.0 / $A[$idx['kpi_divisi']][$idx['peer']];
 
         // --- Perhitungan AHP ---
         // 1) jumlah kolom
-        $colSum = array_fill(0,$n,0.0);
-        for ($j=0; $j<$n; $j++) {
-            for ($i=0; $i<$n; $i++) $colSum[$j] += $A[$i][$j];
+        $colSum = array_fill(0, $n, 0.0);
+        for ($j = 0; $j < $n; $j++) {
+            for ($i = 0; $i < $n; $i++) $colSum[$j] += $A[$i][$j];
         }
 
-        // 2) normalisasi + eigen approx
-        $norm = array_fill(0,$n,array_fill(0,$n,0.0));
-        for ($i=0; $i<$n; $i++) {
-            for ($j=0; $j<$n; $j++) {
+        // 2) normalisasi kolom & eigen approx (rata-rata baris)
+        $norm = array_fill(0, $n, array_fill(0, $n, 0.0));
+        for ($i = 0; $i < $n; $i++) {
+            for ($j = 0; $j < $n; $j++) {
                 $norm[$i][$j] = $A[$i][$j] / ($colSum[$j] ?: 1e-12);
             }
         }
-        $w = array_fill(0,$n,0.0);
-        for ($i=0; $i<$n; $i++) {
-            $row = 0.0; for ($j=0; $j<$n; $j++) $row += $norm[$i][$j];
+        $w = array_fill(0, $n, 0.0);
+        for ($i = 0; $i < $n; $i++) {
+            $row = 0.0;
+            for ($j = 0; $j < $n; $j++) $row += $norm[$i][$j];
             $w[$i] = $row / $n;
         }
 
         // 3) lambda max
-        $Aw = array_fill(0,$n,0.0);
-        for ($i=0; $i<$n; $i++) {
-            for ($j=0; $j<$n; $j++) $Aw[$i] += $A[$i][$j] * $w[$j];
+        $Aw = array_fill(0, $n, 0.0);
+        for ($i = 0; $i < $n; $i++) {
+            for ($j = 0; $j < $n; $j++) $Aw[$i] += $A[$i][$j] * $w[$j];
         }
         $lambdaVals = [];
-        for ($i=0; $i<$n; $i++) $lambdaVals[] = $Aw[$i] / ($w[$i] ?: 1e-12);
-        $lambdaMax = array_sum($lambdaVals)/$n;
+        for ($i = 0; $i < $n; $i++) $lambdaVals[] = $Aw[$i] / ($w[$i] ?: 1e-12);
+        $lambdaMax = array_sum($lambdaVals) / $n;
 
         // 4) CI & CR (RI untuk n=3 = 0.58)
-        $CI = ($n>1) ? (($lambdaMax - $n)/($n-1)) : 0.0;
+        $CI = ($n > 1) ? (($lambdaMax - $n) / ($n - 1)) : 0.0;
         $RI = 0.58;
-        $CR = $RI>0 ? ($CI/$RI) : 0.0;
+        $CR = $RI > 0 ? ($CI / $RI) : 0.0;
 
         if ($CR > 0.1) {
-            return back()->with('error','Pembobotan gagal: CR = '.round($CR,4).' > 0.1. Mohon sesuaikan perbandingan.')->withInput();
+            return back()
+                ->with('error', 'Pembobotan gagal: CR = ' . round($CR, 4) . ' > 0.1. Mohon sesuaikan perbandingan.')
+                ->withInput();
         }
 
-        // normalisasi w agar jumlah = 1
+        // normalisasi w agar jumlah = 1 (secara teori sudah 1, tapi diamankan)
         $sumW = array_sum($w) ?: 1.0;
-        $W_umum   = $w[$idx['kpi_umum']]/$sumW;
-        $W_divisi = $w[$idx['kpi_divisi']]/$sumW;
-        $W_peer   = $w[$idx['peer']]/$sumW;
+        $W_umum   = $w[$idx['kpi_umum']]   / $sumW;
+        $W_divisi = $w[$idx['kpi_divisi']] / $sumW;
+        $W_peer   = $w[$idx['peer']]       / $sumW;
 
-        // simpan: pakai satu baris saja (update baris terakhir jika ada; else create)
-        $existing = AhpGlobalWeight::query()->orderBy('id','desc')->first();
+        // Simpan (update baris terakhir jika ada; else create)
+        $existing = AhpGlobalWeight::query()->orderBy('id', 'desc')->first();
         if ($existing) {
             $existing->update([
-                'w_kpi_umum'  => $W_umum,
-                'w_kpi_divisi'=> $W_divisi,
-                'w_peer'      => $W_peer,
-                'lambda_max'  => $lambdaMax,
-                'ci'          => $CI,
-                'cr'          => $CR,
+                'w_kpi_umum'   => $W_umum,
+                'w_kpi_divisi' => $W_divisi,
+                'w_peer'       => $W_peer,
+                'lambda_max'   => $lambdaMax,
+                'ci'           => $CI,
+                'cr'           => $CR,
             ]);
         } else {
             AhpGlobalWeight::create([
-                'w_kpi_umum'  => $W_umum,
-                'w_kpi_divisi'=> $W_divisi,
-                'w_peer'      => $W_peer,
-                'lambda_max'  => $lambdaMax,
-                'ci'          => $CI,
-                'cr'          => $CR,
+                'w_kpi_umum'   => $W_umum,
+                'w_kpi_divisi' => $W_divisi,
+                'w_peer'       => $W_peer,
+                'lambda_max'   => $lambdaMax,
+                'ci'           => $CI,
+                'cr'           => $CR,
             ]);
         }
 
-        return redirect()->route('ahp.global.index')->with('success','Bobot AHP Global berhasil disimpan. CR='.round($CR,4));
+        return redirect()->route('ahp.global.index')->with('success', 'Bobot AHP Global berhasil disimpan. CR=' . round($CR, 4));
     }
 }

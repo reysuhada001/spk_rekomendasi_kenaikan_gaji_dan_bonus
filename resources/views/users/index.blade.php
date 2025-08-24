@@ -91,6 +91,8 @@
                             <tr>
                                 <th style="width:60px">#</th>
                                 <th>PHOTO</th>
+                                <th>NIK</th>
+                                <th>Nama Lengkap</th>
                                 <th>EMAIL</th>
                                 <th>USERNAME</th>
                                 <th class="password-col">PASSWORD</th>
@@ -118,7 +120,8 @@
                                             </div>
                                         @endif
                                     </td>
-
+                                    <td>{{ $u->nik }}</td>
+                                    <td>{{ $u->full_name }}</td>
                                     <td class="fw-semibold">{{ $u->email }}</td>
                                     <td>{{ $u->username }}</td>
 
@@ -176,21 +179,80 @@
                     $from = $users->count() ? $users->firstItem() : 0;
                     $to = $users->count() ? $users->lastItem() : 0;
                     $total = $users->total();
+
+                    // Hitung range halaman (mimic onEachSide(1)) + ellipsis
+                    $current = $users->currentPage();
+                    $last = $users->lastPage();
+
+                    $start = max(1, $current - 1);
+                    $end = min($last, $current + 1);
                 @endphp
                 <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
                     <small class="text-muted">Showing {{ $from }} to {{ $to }} of {{ $total }}
                         entries</small>
-                    @if ($users->hasPages())
-                        {{ $users->onEachSide(1)->links() }}
-                    @else
-                        <nav>
-                            <ul class="pagination mb-0">
+
+                    {{-- PAGINATION GAYA SNEAT (selalu tampil, meski 1 halaman) --}}
+                    <nav>
+                        <ul class="pagination justify-content-end mb-0">
+                            {{-- Prev --}}
+                            @if ($current <= 1)
                                 <li class="page-item disabled"><span class="page-link">«</span></li>
-                                <li class="page-item active"><span class="page-link">1</span></li>
+                            @else
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ $users->previousPageUrl() }}" rel="prev">«</a>
+                                </li>
+                            @endif
+
+                            {{-- First page --}}
+                            @if ($start > 1)
+                                <li class="page-item {{ $current === 1 ? 'active' : '' }}">
+                                    @if ($current === 1)
+                                        <span class="page-link">1</span>
+                                    @else
+                                        <a class="page-link" href="{{ $users->url(1) }}">1</a>
+                                    @endif
+                                </li>
+                                @if ($start > 2)
+                                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                                @endif
+                            @endif
+
+                            {{-- Middle range (current ±1) --}}
+                            @for ($p = $start; $p <= $end; $p++)
+                                <li class="page-item {{ $p === $current ? 'active' : '' }}">
+                                    @if ($p === $current)
+                                        <span class="page-link">{{ $p }}</span>
+                                    @else
+                                        <a class="page-link" href="{{ $users->url($p) }}">{{ $p }}</a>
+                                    @endif
+                                </li>
+                            @endfor
+
+                            {{-- Last page --}}
+                            @if ($end < $last)
+                                @if ($end < $last - 1)
+                                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                                @endif
+                                <li class="page-item {{ $current === $last ? 'active' : '' }}">
+                                    @if ($current === $last)
+                                        <span class="page-link">{{ $last }}</span>
+                                    @else
+                                        <a class="page-link" href="{{ $users->url($last) }}">{{ $last }}</a>
+                                    @endif
+                                </li>
+                            @endif
+
+                            {{-- Next --}}
+                            @if ($current >= $last)
                                 <li class="page-item disabled"><span class="page-link">»</span></li>
-                            </ul>
-                        </nav>
-                    @endif
+                            @else
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ $users->nextPageUrl() }}" rel="next">»</a>
+                                </li>
+                            @endif
+                        </ul>
+                    </nav>
+                    {{-- END PAGINATION GAYA SNEAT --}}
                 </div>
             </div>
         </div>

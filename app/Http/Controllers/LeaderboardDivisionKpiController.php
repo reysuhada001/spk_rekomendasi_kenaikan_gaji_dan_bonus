@@ -12,6 +12,7 @@ use App\Models\KpiDivisiPersentaseRealization;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class LeaderboardDivisionKpiController extends Controller
@@ -51,13 +52,13 @@ class LeaderboardDivisionKpiController extends Controller
         $rows = [];
         foreach ($divisions as $div) {
             // Ambil karyawan di divisi ini
-            $users = User::where('role','karyawan')->where('division_id', $div->id)->pluck('id');
-            if ($users->isEmpty()) continue;
+            $userIds = User::where('role','karyawan')->where('division_id', $div->id)->pluck('id');
+            if ($userIds->isEmpty()) continue;
 
             $scores = [];
-            foreach ($users as $uid) {
-                $s = $this->getKpiDivisiScoreForUser($uid, $div->id, $bulan, $tahun);
-                if ($s !== null) $scores[] = $s;
+            foreach ($userIds as $uid) {
+                $s = $this->getKpiDivisiScoreForUser((int)$uid, (int)$div->id, $bulan, $tahun, $div);
+                if ($s !== null) $scores[] = $s; // 0..200
             }
 
             if (empty($scores)) continue; // tak ada data valid di periode ini
@@ -107,34 +108,99 @@ class LeaderboardDivisionKpiController extends Controller
 
     /**
      * Skor KPI Divisi per karyawan pada periode:
-     * gabungan (rata-rata) dari skor tiap tipe (yang tersedia & approved).
+     * PENJUMLAHAN kontribusi berbobot per tipe (0..200).
+     * - Kuantitatif/Kualitatif/Response: pakai header.total_score (w*score).
+     *   Jika tidak ada, fallback: rata-rata skor mentah × bobot tipe divisi.
+     * - Persentase (level divisi): SUM(bobot_kpi * score) pada bulan/tahun/divisi tsb;
+     *   nilainya sama untuk semua karyawan di divisi pada periode tsb.
      */
-    private function getKpiDivisiScoreForUser(int $userId, int $divisionId, int $bulan, int $tahun): ?float
+    private function getKpiDivisiScoreForUser(int $userId, int $divisionId, int $bulan, int $tahun, ?Division $division = null): ?float
     {
-        $scores = [];
+        $sum = 0.0;
+        $any = false;
 
-        $rq = KpiDivisiKuantitatifRealization::where('user_id',$userId)
-            ->where('bulan',$bulan)->where('tahun',$tahun)
-            ->where('status','approved')->first();
-        if ($rq && $rq->total_score !== null) $scores[] = (float)$rq->total_score;
+        // Kuantitatif
+        $q = KpiDivisiKuantitatifRealization::where([
+            'user_id'=>$userId,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
+        ])->get();
 
-        $rk = KpiDivisiKualitatifRealization::where('user_id',$userId)
-            ->where('bulan',$bulan)->where('tahun',$tahun)
-            ->where('status','approved')->first();
-        if ($rk && $rk->total_score !== null) $scores[] = (float)$rk->total_score;
+        if ($q->isNotEmpty()) {
+            $any = true;
+            if ($q->first()->getAttribute('total_score') !== null) {
+                $sum += $q->sum('total_score');
+            } else {
+                $sum += $this->typeWeightsByDivision($division)['kuantitatif'] * ((float)($q->avg('score') ?? 0));
+            }
+        }
 
-        $rr = KpiDivisiResponseRealization::where('user_id',$userId)
-            ->where('bulan',$bulan)->where('tahun',$tahun)
-            ->where('status','approved')->first();
-        if ($rr && $rr->total_score !== null) $scores[] = (float)$rr->total_score;
+        // Kualitatif
+        $k = KpiDivisiKualitatifRealization::where([
+            'user_id'=>$userId,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
+        ])->get();
 
-        // Persentase: per-KPI Divisi (divisional) → ambil rata-rata skor KPI persentase approved
-        $rp = KpiDivisiPersentaseRealization::where('division_id',$divisionId)
-            ->where('bulan',$bulan)->where('tahun',$tahun)
-            ->where('status','approved')->pluck('score');
-        if ($rp && $rp->count() > 0) $scores[] = (float) round($rp->avg(), 2);
+        if ($k->isNotEmpty()) {
+            $any = true;
+            if ($k->first()->getAttribute('total_score') !== null) {
+                $sum += $k->sum('total_score');
+            } else {
+                $sum += $this->typeWeightsByDivision($division)['kualitatif'] * ((float)($k->avg('score') ?? 0));
+            }
+        }
 
-        if (empty($scores)) return null;
-        return array_sum($scores) / count($scores);
+        // Response
+        $r = KpiDivisiResponseRealization::where([
+            'user_id'=>$userId,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
+        ])->get();
+
+        if ($r->isNotEmpty()) {
+            $any = true;
+            if ($r->first()->getAttribute('total_score') !== null) {
+                $sum += $r->sum('total_score');
+            } else {
+                $sum += $this->typeWeightsByDivision($division)['response'] * ((float)($r->avg('score') ?? 0));
+            }
+        }
+
+        // Persentase (level divisi) → SUM(bobot_kpi * score)
+        $persenWeighted = KpiDivisiPersentaseRealization::query()
+            ->join('kpi_divisi','kpi_divisi.id','=','kpi_divisi_persentase_realizations.kpi_divisi_id')
+            ->where('kpi_divisi_persentase_realizations.division_id', $divisionId)
+            ->where('kpi_divisi_persentase_realizations.bulan', $bulan)
+            ->where('kpi_divisi_persentase_realizations.tahun', $tahun)
+            ->where('kpi_divisi_persentase_realizations.status', 'approved')
+            ->sum(DB::raw('kpi_divisi.bobot * kpi_divisi_persentase_realizations.score'));
+
+        if ($persenWeighted > 0) { $sum += (float)$persenWeighted; $any = true; }
+
+        return $any ? round($sum, 2) : null; // 0..200
+    }
+
+    /** Bobot tipe per divisi (jumlah = 1) – fallback jika header.total_score belum tersedia */
+    private function typeWeightsByDivision(?Division $div): array
+    {
+        $name = trim(strtolower($div->name ?? ''));
+
+        // Technical Support Team
+        if (str_contains($name,'technical') || str_contains($name,'support')) {
+            return [
+                'kuantitatif'=>0.5625,
+                'kualitatif' =>0.0625,
+                'response'   =>0.1875,
+                'persentase' =>0.1875,
+            ];
+        }
+
+        // Creatif Desain
+        if (str_contains($name,'creatif') || str_contains($name,'creative') || str_contains($name,'desain')) {
+            return [
+                'kuantitatif'=>0.50,
+                'kualitatif' =>0.25,
+                'response'   =>0.125,
+                'persentase' =>0.125,
+            ];
+        }
+
+        // Default (mis. CSA bila belum diatur spesifik)
+        return ['kuantitatif'=>0.25,'kualitatif'=>0.25,'response'=>0.25,'persentase'=>0.25];
     }
 }

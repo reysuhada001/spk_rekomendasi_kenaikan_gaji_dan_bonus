@@ -3,13 +3,21 @@
 @section('content')
     <div class="container py-4">
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Input Distribusi — {{ $kpi->nama }} ({{ $bulanList[$kpi->bulan] }} {{ $kpi->tahun }})
                 </h5>
                 <a href="{{ route('distribusi-kpi-divisi.index', ['bulan' => $kpi->bulan, 'tahun' => $kpi->tahun, 'division_id' => $kpi->division_id]) }}"
                     class="btn btn-sm btn-outline-secondary">Kembali</a>
             </div>
+
             <div class="card-body">
+                @if ($distribution->status === 'approved')
+                    <div class="alert alert-info">
+                        Distribusi saat ini <strong>approved</strong>. Menyimpan perubahan akan <strong>mengajukan
+                            revisi</strong> (status menjadi
+                        <em>submitted</em>) dan realisasi terkait akan ditandai <em>stale</em>.
+                    </div>
+                @endif
                 @if (session('error'))
                     <div class="alert alert-danger">{{ session('error') }}</div>
                 @endif

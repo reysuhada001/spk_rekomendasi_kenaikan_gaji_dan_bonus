@@ -12,7 +12,9 @@
                     </small>
                 </div>
                 <a href="{{ route('peer.admin.index', ['bulan' => $bulan, 'tahun' => $tahun, 'division_id' => request('division_id')]) }}"
-                    class="btn btn-light btn-sm"><i class="bx bx-left-arrow-alt me-1"></i>Kembali</a>
+                    class="btn btn-light btn-sm">
+                    <i class="bx bx-left-arrow-alt me-1"></i>Kembali
+                </a>
             </div>
 
             <div class="card-body">
@@ -25,21 +27,18 @@
                             <thead class="table-light">
                                 <tr>
                                     <th style="width:220px">Penilai</th>
-                                    @foreach ($aspeks as $a)
-                                        <th class="text-center">{{ $a->nama }}</th>
+                                    @foreach ($columns as $c)
+                                        <th class="text-center">{{ $c['label'] }}</th>
                                     @endforeach
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach ($assessments as $a)
+                                    @php $row = $itemsMatrix[$a->id] ?? []; @endphp
                                     <tr>
                                         <td>{{ $a->assessor?->full_name ?? '#' . $a->assessor_id }}</td>
-                                        @foreach ($aspeks as $asp)
-                                            @php
-                                                $sc = optional(
-                                                    ($items[$a->id] ?? collect())->firstWhere('aspek_id', $asp->id),
-                                                )->score;
-                                            @endphp
+                                        @foreach ($columns as $c)
+                                            @php $sc = $row[$c['key']] ?? null; @endphp
                                             <td class="text-center">{{ $sc !== null ? $sc : '-' }}</td>
                                         @endforeach
                                     </tr>
@@ -53,17 +52,18 @@
                         <table class="table-sm table align-middle">
                             <thead class="table-light">
                                 <tr>
-                                    @foreach ($aspeks as $a)
-                                        <th class="text-center">{{ $a->nama }}</th>
+                                    @foreach ($columns as $c)
+                                        <th class="text-center">{{ $c['label'] }}</th>
                                     @endforeach
                                     <th class="text-center">Rata-rata Total</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    @foreach ($aspeks as $a)
+                                    @foreach ($columns as $c)
+                                        @php $val = $avgPerKey[$c['key']] ?? null; @endphp
                                         <td class="text-center">
-                                            {{ $avgPerAspek[$a->id] !== null ? rtrim(rtrim(number_format($avgPerAspek[$a->id], 2, '.', ''), '0'), '.') : '-' }}
+                                            {{ $val !== null ? rtrim(rtrim(number_format($val, 2, '.', ''), '0'), '.') : '-' }}
                                         </td>
                                     @endforeach
                                     <td class="text-center">

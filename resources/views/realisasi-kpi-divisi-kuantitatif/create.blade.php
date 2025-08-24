@@ -67,13 +67,36 @@
 @push('scripts')
     <script>
         function calcScore(r, t) {
+            const eps = 1e-9;
             r = parseFloat(r || 0);
             t = parseFloat(t || 0);
             if (t <= 0) return r > 0 ? 150 : 0;
-            if (r >= t) return Math.round((100 * (r / t)) * 100) / 100;
-            const ratio = Math.max(0, Math.min(1, r / t));
-            const s = 50 * (1 - ratio) + 95 * (ratio * ratio); // preview saja
-            return Math.round(s * 100) / 100;
+            if (r >= t) return Math.min(200, Math.round((100 * (r / Math.max(t, eps))) * 100) / 100);
+            const x = Math.max(0, Math.min(1, r / Math.max(t, eps)));
+
+            let muL = 0,
+                muM = 0,
+                muH = 0;
+            if (x <= 0.3) muL = (x - 0.0) / (0.3 - 0.0 + eps);
+            else if (x <= 0.6) muL = (0.6 - x) / (0.6 - 0.3 + eps);
+            muL = Math.max(0, Math.min(1, muL));
+
+            if (x <= 0.4) muM = 0;
+            else if (x <= 0.7) muM = (x - 0.4) / (0.7 - 0.4 + eps);
+            else muM = (1.0 - x) / (1.0 - 0.7 + eps);
+            muM = Math.max(0, Math.min(1, muM));
+
+            if (x <= 0.6) muH = 0;
+            else if (x <= 0.9) muH = (x - 0.6) / (0.9 - 0.6 + eps);
+            else muH = (1.0 - x) / (1.0 - 0.9 + eps);
+            muH = Math.max(0, Math.min(1, muH));
+
+            const wL = 50,
+                wM = 80,
+                wH = 95;
+            const den = muL + muM + muH;
+            if (den <= 0) return 0;
+            return Math.round(((muL * wL + muM * wM + muH * wH) / den) * 100) / 100;
         }
 
         function refresh() {

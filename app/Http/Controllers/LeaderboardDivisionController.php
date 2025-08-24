@@ -18,6 +18,7 @@ use App\Models\AhpGlobalWeight;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class LeaderboardDivisionController extends Controller
@@ -62,29 +63,34 @@ class LeaderboardDivisionController extends Controller
             ]);
         }
 
-        // Ambil karyawan dalam satu divisi saja
+        // Ambil karyawan pada divisi terpilih saja
         $karyawan = User::with('division')
             ->where('role', 'karyawan')
             ->where('division_id', $division_id)
             ->orderBy('full_name')
             ->get();
 
-        // Bobot global (fallback 1/3,1/3,1/3) — dipakai konsisten walau skor tidak ditampilkan
+        // (Bobot global tidak dipakai untuk ranking—tetap disediakan jika sewaktu-waktu mau ditampilkan)
         [$wUmum, $wDiv, $wPeer] = $this->getGlobalWeights();
 
         $rows = [];
         foreach ($karyawan as $u) {
-            $sUmum = $this->getKpiUmumScore($u->id, $bulan, $tahun) ?? 0.0;
-            $sDiv  = $this->getKpiDivisiScore($u->id, (int)$u->division_id, $bulan, $tahun) ?? 0.0;
-            $sPeer = $this->getPeerScore($u->id, $bulan, $tahun) ?? 0.0;
+            $sUmum = $this->getKpiUmumScore($u->id, $bulan, $tahun);                         // 0..200
+            $sDiv  = $this->getKpiDivisiScoreWeighted($u->id, (int)$u->division_id, $bulan, $tahun); // 0..200
+            $sPeer = $this->getPeerScore($u->id, $bulan, $tahun);                            // 0..100
 
-            $final = $wUmum*$sUmum + $wDiv*$sDiv + $wPeer*$sPeer;
+            // Skor bulanan murni (tanpa bobot global) untuk ranking
+            $finalRaw = $this->composeMonthlyRawScore($sUmum, $sDiv, $sPeer); // 0..100
 
             $rows[] = [
                 'user_id'  => $u->id,
                 'name'     => $u->full_name,
                 'division' => $u->division?->name ?? '-',
-                'final'    => round($final, 4),
+                'final'    => round($finalRaw, 4),
+
+                // opsional: jika ingin ditampilkan di view
+                's_umum' => $sUmum, 's_div' => $sDiv, 's_peer' => $sPeer,
+                'w_umum' => $wUmum, 'w_div' => $wDiv, 'w_peer' => $wPeer,
             ];
         }
 
@@ -127,6 +133,7 @@ class LeaderboardDivisionController extends Controller
 
     /* ===================== HELPERS ===================== */
 
+    /** Bobot global (tidak dipakai untuk ranking, hanya opsional untuk ditampilkan) */
     private function getGlobalWeights(): array
     {
         $w = AhpGlobalWeight::latest()->first();
@@ -141,6 +148,7 @@ class LeaderboardDivisionController extends Controller
         return [$ku/$sum, $kd/$sum, $kp/$sum];
     }
 
+    /** Skor KPI Umum (approved) — skala 0..200 */
     private function getKpiUmumScore(int $userId, int $bulan, int $tahun): ?float
     {
         $r = KpiUmumRealization::where('user_id', $userId)
@@ -152,35 +160,46 @@ class LeaderboardDivisionController extends Controller
         return $r? (float)$r->total_score : null;
     }
 
-    private function getKpiDivisiScore(int $userId, int $divisionId, int $bulan, int $tahun): ?float
+    /**
+     * Skor KPI Divisi ter-bobot (0..200):
+     *   Kuantitatif/Kualitatif/Response  → header.total_score (w*score)
+     *   Persentase (level divisi)        → SUM(bobot_kpi * score) via join ke kpi_divisi
+     */
+    private function getKpiDivisiScoreWeighted(int $userId, int $divisionId, int $bulan, int $tahun): ?float
     {
-        $scores = [];
+        $sumWeighted = 0.0;
+        $hasAny = false;
 
         $rq = KpiDivisiKuantitatifRealization::where('user_id',$userId)
             ->where('bulan',$bulan)->where('tahun',$tahun)
-            ->where('status','approved')->first();
-        if ($rq && $rq->total_score !== null) $scores[] = (float)$rq->total_score;
+            ->where('status','approved')->value('total_score');
+        if (!is_null($rq)) { $sumWeighted += (float)$rq; $hasAny = true; }
 
         $rk = KpiDivisiKualitatifRealization::where('user_id',$userId)
             ->where('bulan',$bulan)->where('tahun',$tahun)
-            ->where('status','approved')->first();
-        if ($rk && $rk->total_score !== null) $scores[] = (float)$rk->total_score;
+            ->where('status','approved')->value('total_score');
+        if (!is_null($rk)) { $sumWeighted += (float)$rk; $hasAny = true; }
 
         $rr = KpiDivisiResponseRealization::where('user_id',$userId)
             ->where('bulan',$bulan)->where('tahun',$tahun)
-            ->where('status','approved')->first();
-        if ($rr && $rr->total_score !== null) $scores[] = (float)$rr->total_score;
+            ->where('status','approved')->value('total_score');
+        if (!is_null($rr)) { $sumWeighted += (float)$rr; $hasAny = true; }
 
-        // KPI persentase: per KPI Divisi (divisional). Ambil rata-rata skor yang approved.
-        $rp = KpiDivisiPersentaseRealization::where('division_id',$divisionId)
-            ->where('bulan',$bulan)->where('tahun',$tahun)
-            ->where('status','approved')->pluck('score');
-        if ($rp && $rp->count() > 0) $scores[] = (float) round($rp->avg(), 2);
+        // Persentase ⇒ SUM(bobot_kpi * score) pada periode & divisi yang sama
+        $persenSum = KpiDivisiPersentaseRealization::query()
+            ->join('kpi_divisi','kpi_divisi.id','=','kpi_divisi_persentase_realizations.kpi_divisi_id')
+            ->where('kpi_divisi_persentase_realizations.division_id', $divisionId)
+            ->where('kpi_divisi_persentase_realizations.bulan', $bulan)
+            ->where('kpi_divisi_persentase_realizations.tahun', $tahun)
+            ->where('kpi_divisi_persentase_realizations.status', 'approved')
+            ->sum(DB::raw('kpi_divisi.bobot * kpi_divisi_persentase_realizations.score'));
 
-        if (empty($scores)) return null;
-        return array_sum($scores) / count($scores);
+        if ($persenSum > 0) { $sumWeighted += (float)$persenSum; $hasAny = true; }
+
+        return $hasAny ? round($sumWeighted, 2) : null;
     }
 
+    /** Skor peer (1..10 → 0..100), hanya data locked bila kolom status tersedia */
     private function getPeerScore(int $userId, int $bulan, int $tahun): ?float
     {
         $assessmentIds = PeerAssessment::where('assessee_id', $userId)
@@ -196,5 +215,22 @@ class LeaderboardDivisionController extends Controller
         $avg10  = (float)$scores->avg(); // 1..10
         $avg100 = $avg10 * 10.0;        // 0..100
         return round($avg100, 2);
+    }
+
+    /**
+     * Skor bulanan murni untuk ranking:
+     * - KPI Umum & KPI Divisi (0..200) → ÷2 menjadi 0..100
+     * - Peer (0..100) tetap
+     * - Dirata-ratakan hanya komponen yang tersedia.
+     */
+    private function composeMonthlyRawScore(?float $sUmum, ?float $sDiv, ?float $sPeer): float
+    {
+        $parts = [];
+        if ($sUmum !== null) $parts[] = max(0.0, min(100.0, $sUmum / 2.0));
+        if ($sDiv  !== null) $parts[] = max(0.0, min(100.0, $sDiv  / 2.0));
+        if ($sPeer !== null) $parts[] = max(0.0, min(100.0, $sPeer));
+
+        if (empty($parts)) return 0.0;
+        return round(array_sum($parts) / count($parts), 4);
     }
 }

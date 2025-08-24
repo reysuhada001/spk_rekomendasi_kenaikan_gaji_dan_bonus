@@ -5,7 +5,6 @@
         <div class="card">
             <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <h5 class="mb-0">Pembobotan AHP — Global (KPI Umum, KPI Divisi, Penilaian Karyawan)</h5>
-                {{-- Tidak ada filter periode --}}
             </div>
 
             <div class="card-body">
@@ -39,6 +38,9 @@
 
                 <form method="POST" action="{{ route('ahp.global.hitung') }}">
                     @csrf
+
+
+
                     <div class="table-responsive"
                         style="white-space: normal; overflow-x:hidden; overflow-y:auto; max-height:65vh;">
                         <table class="table-hover table align-middle">
@@ -51,15 +53,24 @@
                             </thead>
                             <tbody>
                                 @foreach ($pairs as [$c1, $c2])
+                                    @php $field = "pair_{$c1}_{$c2}"; @endphp
                                     <tr>
-                                        <td class="fw-semibold">{{ $criteria[$c1] }}</td>
+                                        <td class="fw-semibold">
+                                            {{ $criteria[$c1] }}
+
+                                        </td>
                                         <td class="text-center">
-                                            <select class="form-select" name="pair_{{ $c1 }}_{{ $c2 }}"
-                                                required style="min-width:120px;">
+                                            <select class="form-select" name="{{ $field }}" required
+                                                style="min-width:120px;">
                                                 @foreach ($saatyOptions as $val => $label)
-                                                    <option value="{{ $val }}">{{ $label }}</option>
+                                                    <option value="{{ $val }}" @selected(old($field) == $val)>
+                                                        {{ $label }}
+                                                    </option>
                                                 @endforeach
                                             </select>
+                                            @error($field)
+                                                <div class="text-danger small mt-1">{{ $message }}</div>
+                                            @enderror
                                         </td>
                                         <td class="fw-semibold text-end">{{ $criteria[$c2] }}</td>
                                     </tr>
@@ -96,6 +107,9 @@
             timer: 2500,
             timerProgressBar: true
         });
+        @php
+            $maxErr = 3;
+        @endphp
         @if (session('success'))
             Toast.fire({
                 icon: 'success',
@@ -109,7 +123,7 @@
             });
         @endif
         @if ($errors->any())
-            @foreach ($errors->take(3) as $err)
+            @foreach ($errors->take($maxErr) as $err)
                 Toast.fire({
                     icon: 'error',
                     title: @json($err)

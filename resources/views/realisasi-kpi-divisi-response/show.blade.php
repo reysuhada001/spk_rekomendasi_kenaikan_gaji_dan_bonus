@@ -22,6 +22,25 @@
                     <div class="alert alert-danger">Ditolak HR: {{ $real->hr_note }}</div>
                 @endif
 
+                <div class="d-flex justify-content-between mb-3">
+                    <div>
+                        <span class="me-2">Status:</span>
+                        @if ($real->status === 'approved')
+                            <span class="badge bg-label-success">Approved</span>
+                        @elseif($real->status === 'submitted')
+                            <span class="badge bg-label-warning">Submitted</span>
+                        @elseif($real->status === 'stale')
+                            <span class="badge bg-label-secondary">Stale</span>
+                        @else
+                            <span class="badge bg-label-danger">Rejected</span>
+                        @endif
+                    </div>
+                    <div>
+                        <span class="me-2">Skor Total:</span>
+                        <strong>{{ rtrim(rtrim(number_format(round($total ?? 0, 2), 2, '.', ''), '0'), '.') }}%</strong>
+                    </div>
+                </div>
+
                 <div class="table-responsive" style="max-height:65vh; overflow:auto; white-space:nowrap;">
                     <table class="table-hover table align-middle">
                         <thead class="table-light">
@@ -33,7 +52,6 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @php $sum = 0; @endphp
                             @foreach ($items as $it)
                                 @php
                                     $k = $kpis[$it->kpi_divisi_id] ?? null;
@@ -41,16 +59,17 @@
                                         $it->score !== null
                                             ? rtrim(rtrim(number_format($it->score, 2, '.', ''), '0'), '.')
                                             : '-';
-                                    $sum += (float) ($it->score ?? 0) * (float) ($k?->bobot ?? 0);
                                 @endphp
                                 <tr>
                                     <td class="fw-semibold">{{ $k?->nama ?? '-' }}</td>
                                     <td class="text-end">
                                         {{ rtrim(rtrim(number_format($it->target, 2, '.', ''), '0'), '.') }}
-                                        {{ $k?->satuan }}</td>
+                                        {{ $k?->satuan }}
+                                    </td>
                                     <td class="text-end">
                                         {{ rtrim(rtrim(number_format($it->realization, 2, '.', ''), '0'), '.') }}
-                                        {{ $k?->satuan }}</td>
+                                        {{ $k?->satuan }}
+                                    </td>
                                     <td class="text-end">{{ $sc }}</td>
                                 </tr>
                             @endforeach
@@ -58,46 +77,24 @@
                     </table>
                 </div>
 
-                <div class="d-flex justify-content-between align-items-center mt-3">
-                    <div>
-                        <span class="me-3">Status:
-                            @if ($real->status === 'approved')
-                                <span class="badge bg-label-success">Approved</span>
-                            @elseif($real->status === 'submitted')
-                                <span class="badge bg-label-warning">Submitted</span>
-                            @elseif($real->status === 'stale')
-                                <span class="badge bg-label-secondary">Stale</span>
-                            @else
-                                <span class="badge bg-label-danger">Rejected</span>
-                            @endif
-                        </span>
-                        @if (!is_null($total) && $real->status !== 'stale')
-                            <span>Total Skor (Σ w·s):
-                                <strong>{{ rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.') }}%</strong></span>
-                        @elseif($real->status === 'approved' && !is_null($real->total_score))
-                            <span>Total Skor:
-                                <strong>{{ rtrim(rtrim(number_format($real->total_score, 2, '.', ''), '0'), '.') }}%</strong></span>
-                        @else
-                            <span class="text-muted">Total skor menunggu bobot AHP atau verifikasi.</span>
-                        @endif
+                @if (auth()->user()->role === 'hr' && $real->status === 'submitted')
+                    <div class="d-flex justify-content-end mt-3 gap-2">
+                        <form id="approveForm" method="POST"
+                            action="{{ route('realisasi-kpi-divisi-response.approve', $real->id) }}">
+                            @csrf
+                            <button type="button" class="btn btn-success" onclick="approveReal()">
+                                <i class="bx bx-check me-1"></i> ACC
+                            </button>
+                        </form>
+
+                        <button class="btn btn-danger" onclick="rejectReal()">Tolak</button>
+                        <form id="rejectForm" method="POST"
+                            action="{{ route('realisasi-kpi-divisi-response.reject', $real->id) }}" class="d-none">
+                            @csrf
+                            <input type="hidden" name="hr_note" id="hr_note">
+                        </form>
                     </div>
-
-                    @if (auth()->user()->role === 'hr' && $real->status === 'submitted')
-                        <div class="d-flex gap-2">
-                            <form method="POST" action="{{ route('realisasi-kpi-divisi-response.approve', $real->id) }}">
-                                @csrf
-                                <button type="submit" class="btn btn-success"><i class="bx bx-check me-1"></i> ACC</button>
-                            </form>
-
-                            <button class="btn btn-danger" onclick="rejectReal()">Tolak</button>
-                            <form id="rejectForm" method="POST"
-                                action="{{ route('realisasi-kpi-divisi-response.reject', $real->id) }}" class="d-none">
-                                @csrf
-                                <input type="hidden" name="hr_note" id="hr_note">
-                            </form>
-                        </div>
-                    @endif
-                </div>
+                @endif
             </div>
         </div>
     </div>
@@ -106,6 +103,21 @@
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        function approveReal() {
+            Swal.fire({
+                title: 'ACC Realisasi?',
+                text: 'Pastikan data sudah benar. Tindakan ini akan mengesahkan realisasi KPI Divisi Response.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, ACC',
+                cancelButtonText: 'Batal'
+            }).then((res) => {
+                if (res.isConfirmed) {
+                    document.getElementById('approveForm').submit();
+                }
+            });
+        }
+
         function rejectReal() {
             Swal.fire({
                 title: 'Alasan Penolakan',

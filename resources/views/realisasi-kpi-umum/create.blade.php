@@ -72,38 +72,59 @@
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        // Fuzzy helper di front-end (sinkron dgn backend)
-        function clamp(x, a, b) {
-            return Math.max(a, Math.min(b, x));
+        // === KONSTANTA harus sama dengan backend ===
+        const CAP_MAX = 200.0; // sama dgn controller
+
+        // === Triangular membership μ(x; a,b,c) ===
+        function tri(x, a, b, c) {
+            if (x <= a || x >= c) return 0.0;
+            if (x === b) return 1.0;
+            if (x < b) return (x - a) / Math.max(1e-9, (b - a));
+            return (c - x) / Math.max(1e-9, (c - b));
         }
 
-        function fuzzyBelowTarget(r) {
-            let muLow = (r <= 0.4) ? 1 : (r >= 0.8 ? 0 : (0.8 - r) / 0.4);
-            let muNear = (r <= 0.6) ? 0 : (r >= 1.0 ? 1 : (r - 0.6) / 0.4);
-            let num = muLow * 60 + muNear * 90,
-                den = muLow + muNear;
-            return den > 0 ? (num / den) : 50;
+        // === Fuzzy utk Kuantitatif/Kualitatif/Response (anchor 50/80/95) ===
+        function fuzzyGeneral(r) {
+            const muL = tri(r, 0.0, 0.3, 0.6); // L
+            const muM = tri(r, 0.4, 0.7, 1.0); // M
+            const muH = tri(r, 0.6, 0.9, 1.0); // H
+            const num = muL * 50 + muM * 80 + muH * 95;
+            const den = muL + muM + muH;
+            return den > 0 ? (num / den) : 50.0;
         }
 
+        // === Fuzzy utk Persentase (anchor 60/85/98) ===
+        function fuzzyPercent(r) {
+            const muL = tri(r, 0.0, 0.3, 0.6); // L
+            const muM = tri(r, 0.4, 0.6, 0.8); // M
+            const muH = tri(r, 0.7, 1.0, 1.0); // H (puncak di 1.0)
+            const num = muL * 60 + muM * 85 + muH * 98;
+            const den = muL + muM + muH;
+            return den > 0 ? (num / den) : 60.0;
+        }
+
+        // === Skor per KPI (identik dengan backend) ===
         function scorePerKpi(tipe, target, realisasi) {
-            target = parseFloat(target || 0);
-            realisasi = parseFloat(realisasi || 0);
+            const t = parseFloat(target || 0);
+            const r = parseFloat(realisasi || 0);
+
             if (tipe === 'response') {
-                if (realisasi <= 0) return 0;
-                let ratio = target / realisasi;
-                if (ratio >= 1) return 100 * ratio; // lebih cepat / sama
-                return fuzzyBelowTarget(ratio);
-            } else {
-                if (target <= 0) return 0;
-                let ratio = realisasi / target;
-                if (ratio >= 1) return 100 * ratio; // di atas / sama
-                return fuzzyBelowTarget(ratio);
+                if (r <= 0) return 0;
+                const y = t / r; // lebih cepat = lebih baik
+                return (y >= 1) ? Math.min(CAP_MAX, 100 * y) : fuzzyGeneral(y);
             }
+
+            if (t <= 0) return 0; // selain response butuh target > 0
+            const x = r / t; // lebih besar = lebih baik
+
+            if (x >= 1) return Math.min(CAP_MAX, 100 * x);
+            if (tipe === 'persentase') return fuzzyPercent(x);
+            return fuzzyGeneral(x); // kuantitatif & kualitatif
         }
 
         function fmt(x) {
-            return (Math.round(x * 100) / 100).toString();
-        } // 2 desimal max
+            return (Math.round(x * 100) / 100).toString(); // 2 desimal
+        }
 
         function recalcRow(tr) {
             const inp = tr.querySelector('.js-real');

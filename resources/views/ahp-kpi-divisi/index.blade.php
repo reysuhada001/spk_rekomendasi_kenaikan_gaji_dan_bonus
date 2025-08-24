@@ -98,7 +98,7 @@
 
                         <div class="d-flex justify-content-end mt-3">
                             <button type="submit" class="btn btn-primary">
-                                <i class="bx bx-calculator me-1"></i> Hitung & Simpan Bobot
+                                <i class="bx bx-calculator me-1"></i> Hitung
                             </button>
                         </div>
                     </form>

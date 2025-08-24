@@ -4,23 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\Division;
-
-// AHP Global (bobot 3 kriteria)
 use App\Models\AhpGlobalWeight;
-
-// KPI Umum
 use App\Models\KpiUmumRealization;
-
-// KPI Divisi — header realisasi per tipe
 use App\Models\KpiDivisiKuantitatifRealization;
 use App\Models\KpiDivisiKualitatifRealization;
 use App\Models\KpiDivisiResponseRealization;
 use App\Models\KpiDivisiPersentaseRealization;
-
-// Peer assessment
 use App\Models\PeerAssessment;
 use App\Models\PeerAssessmentItem;
-
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
@@ -32,28 +23,26 @@ class BonusRecommendationController extends Controller
         7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'
     ];
 
+    // Ambang band bonus (longgar ringan)
+    private float $BAIK_MAX = 115.0;
+    private float $SANGAT_BAIK_START = 116.0;
+    private float $SANGAT_BAIK_LINEAR_TO = 135.0;
+
     public function index(Request $request)
     {
         $me = Auth::user();
 
         $perPage = (int) $request->input('per_page', 10);
         $search  = $request->input('search', '');
+        $bulan   = $request->filled('bulan') ? (int)$request->bulan : null;
+        $tahun   = $request->filled('tahun') ? (int)$request->tahun : null;
 
-        $bulan = $request->filled('bulan') ? (int)$request->bulan : null;
-        $tahun = $request->filled('tahun') ? (int)$request->tahun : null;
-
-        // Divisi filter (HR/Owner saja)
         $division_id = $request->filled('division_id') ? (int)$request->division_id : null;
-        if ($me->role === 'leader') {
-            $division_id = $me->division_id;
-        } elseif ($me->role === 'karyawan') {
-            $division_id = null; // tidak digunakan (hanya dirinya)
-        }
+        if ($me->role === 'leader')      $division_id = $me->division_id;
+        elseif ($me->role === 'karyawan') $division_id = null;
 
         $divisions = Division::orderBy('name')->get();
 
-        // Jika leader/karyawan: wajib bulan & tahun. Jika owner/hr: wajib bulan, tahun, dan (opsional) divisi? —
-        // untuk kenyamanan, jika divisi kosong tetap tampil semua.
         if (is_null($bulan) || is_null($tahun)) {
             $users = User::whereRaw('1=0')->paginate($perPage);
             return view('bonus-rekomendasi.index', [
@@ -64,10 +53,9 @@ class BonusRecommendationController extends Controller
             ]);
         }
 
-        // Base users sesuai role
         $usersQ = User::with('division')
-            ->when($search, function($q) use ($search) {
-                $q->where(function($qq) use ($search){
+            ->when($search, function($q) use($search){
+                $q->where(function($qq) use($search){
                     $qq->where('full_name','like',"%{$search}%")
                        ->orWhere('nik','like',"%{$search}%")
                        ->orWhere('email','like',"%{$search}%")
@@ -75,48 +63,40 @@ class BonusRecommendationController extends Controller
                 });
             });
 
-        if ($me->role === 'leader') {
-            $usersQ->where('division_id', $me->division_id)->where('role','karyawan');
-        } elseif ($me->role === 'karyawan') {
-            $usersQ->where('id', $me->id);
-        } elseif (in_array($me->role, ['owner','hr'], true)) {
-            if (!empty($division_id)) $usersQ->where('division_id', $division_id);
+        if     ($me->role === 'leader')   $usersQ->where('division_id',$me->division_id)->where('role','karyawan');
+        elseif ($me->role === 'karyawan') $usersQ->where('id',$me->id);
+        elseif (in_array($me->role,['owner','hr'],true)) {
+            if (!empty($division_id)) $usersQ->where('division_id',$division_id);
             $usersQ->where('role','karyawan');
         }
 
         $users = $usersQ->orderBy('full_name')->paginate($perPage)->appends($request->all());
 
-        // Bobot global (AHP); fallback 1/3 jika belum ada
         [$wUmum, $wDivisi, $wPeer] = $this->getGlobalWeights();
 
         $rows = [];
         foreach ($users as $u) {
-            $ku = $this->getKpiUmumScore($u->id, $bulan, $tahun);     // 0..∞ (umumnya ~% di sekitar 100)
-            $kd = $this->getKpiDivisiScore($u->id, $bulan, $tahun);   // 0..∞ (rata 4 tipe tersedia)
-            $kp = $this->getPeerScore($u->id, $bulan, $tahun);        // 0..100
+            $ku = $this->getKpiUmumScore($u->id, $bulan, $tahun);   // 0..200
+            $kd = $this->getKpiDivisiScoreWeighted($u, $bulan, $tahun); // 0..200 (terkalikan bobot tipe)
+            $kp = $this->getPeerScore($u->id, $bulan, $tahun);      // 0..100
 
-            // Normalisasi bobot jika ada komponen yang tidak tersedia (null)
             $weights = $this->renormalizeWeights(
-                ['umum'=>$ku, 'divisi'=>$kd, 'peer'=>$kp],
-                ['umum'=>$wUmum, 'divisi'=>$wDivisi, 'peer'=>$wPeer]
+                ['umum'=>$ku,'divisi'=>$kd,'peer'=>$kp],
+                ['umum'=>$wUmum,'divisi'=>$wDivisi,'peer'=>$wPeer]
             );
 
+            // Weighted sum murni
             $final = 0.0;
-            if ($ku !== null) $final += $weights['umum']  * $ku;
-            if ($kd !== null) $final += $weights['divisi']* $kd;
-            if ($kp !== null) $final += $weights['peer']  * $kp;
+            if ($ku !== null) $final += $weights['umum']   * $ku;
+            if ($kd !== null) $final += $weights['divisi'] * $kd;
+            if ($kp !== null) $final += $weights['peer']   * $kp;
             $final = round($final, 2);
 
             [$label, $bonusPct] = $this->bonusBand($final);
 
             $rows[$u->id] = [
-                'kpi_umum'   => $ku,
-                'kpi_divisi' => $kd,
-                'peer'       => $kp,
-                'w'          => $weights,
-                'final'      => $final,
-                'label'      => $label,
-                'bonus_pct'  => $bonusPct,
+                'kpi_umum'=>$ku,'kpi_divisi'=>$kd,'peer'=>$kp,
+                'w'=>$weights,'final'=>$final,'label'=>$label,'bonus_pct'=>$bonusPct
             ];
         }
 
@@ -130,150 +110,182 @@ class BonusRecommendationController extends Controller
 
     /* =================== HELPERS =================== */
 
-    /** Bobot global (AHP). Fallback = sama rata (1/3). */
     private function getGlobalWeights(): array
     {
         $w = AhpGlobalWeight::latest()->first();
-        if (!$w) return [1/3, 1/3, 1/3];
-
-        $ku = (float)($w->kpi_umum ?? 0);
-        $kd = (float)($w->kpi_divisi ?? 0);
-        $kp = (float)($w->peer     ?? 0);
-        $sum = $ku + $kd + $kp;
-        if ($sum <= 0) return [1/3, 1/3, 1/3];
-
+        if (!$w) return [1/3,1/3,1/3];
+        $ku = (float)($w->w_kpi_umum ?? 0);
+        $kd = (float)($w->w_kpi_divisi ?? 0);
+        $kp = (float)($w->w_peer ?? 0);
+        $sum = $ku+$kd+$kp;
+        if ($sum <= 0) return [1/3,1/3,1/3];
         return [$ku/$sum, $kd/$sum, $kp/$sum];
     }
 
-    /** KPI Umum — ambil skor approved (total_score) per user/periode. */
     private function getKpiUmumScore(int $userId, int $bulan, int $tahun): ?float
     {
         $r = KpiUmumRealization::where([
-                'user_id'=>$userId,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
-            ])->first();
-
+            'user_id'=>$userId,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
+        ])->first();
         return $r ? round((float)$r->total_score, 2) : null;
     }
 
     /**
-     * KPI Divisi — gabungan 4 tipe (kuantitatif, kualitatif, response, persentase).
-     *  - 3 tipe pertama: per-user (header realisasi).
-     *  - persentase: per-divisi (BUKAN per-user!) → ambil berdasarkan division_id karyawan.
-     * Nilai akhir = rata-rata dari tipe yang tersedia (tanpa bobot tipe).
+     * Bobot tipe per divisi (jumlah = 1).
+     * Kalau kamu sudah punya tabel bobot tipe di DB, ganti fungsi ini supaya baca dari DB.
      */
-    private function getKpiDivisiScore(int $userId, int $bulan, int $tahun): ?float
+    private function typeWeightsByDivision(?Division $div): array
     {
-        $scores = [];
-        // kuantitatif
-        $q = KpiDivisiKuantitatifRealization::where([
-                'user_id'=>$userId,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
-            ])->first();
-        if ($q) $scores[] = (float)$q->total_score;
+        $name = trim(strtolower($div->name ?? ''));
 
-        // kualitatif
-        $k = KpiDivisiKualitatifRealization::where([
-                'user_id'=>$userId,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
-            ])->first();
-        if ($k) $scores[] = (float)$k->total_score;
-
-        // response
-        $r = KpiDivisiResponseRealization::where([
-                'user_id'=>$userId,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
-            ])->first();
-        if ($r) $scores[] = (float)$r->total_score;
-
-        // persentase — PER DIVISI
-        $user = User::find($userId);
-        if ($user && $user->division_id) {
-            $p = KpiDivisiPersentaseRealization::where([
-                    'division_id'=>$user->division_id,
-                    'bulan'=>$bulan,
-                    'tahun'=>$tahun,
-                    'status'=>'approved',
-                ])->first();
-
-            if ($p) $scores[] = (float)$p->total_score;
+        // Technical Support Team
+        if (str_contains($name,'technical') || str_contains($name,'support')) {
+            return [
+                'kuantitatif'=>0.5625,  // JD
+                'kualitatif' =>0.0625,  // SAT
+                'response'   =>0.1875,  // RT
+                'persentase' =>0.1875,  // SLA
+            ];
         }
 
-        if (empty($scores)) return null;
+        // Creatif Desain
+        if (str_contains($name,'creatif') || str_contains($name,'creative') || str_contains($name,'desain')) {
+            return [
+                'kuantitatif'=>0.50,    // JPD
+                'kualitatif' =>0.25,    // KHD
+                'response'   =>0.125,   // PTW
+                'persentase' =>0.125,   // RWP
+            ];
+        }
 
-        $avg = array_sum($scores) / count($scores);
-        return round($avg, 2);
+        // Default (misal Chat Sales Agent, jika belum ditentukan di DB)
+        return [
+            'kuantitatif'=>0.25,
+            'kualitatif' =>0.25,
+            'response'   =>0.25,
+            'persentase' =>0.25,
+        ];
     }
 
     /**
-     * Peer score — rata-rata skor (1..10) → dikonversi ke 0..100.
-     * Sumber skor diambil dari tabel items (peer_assessment_items) yang
-     * berelasi dengan assessment milik “assessee” (yang dinilai).
+     * Kd berbobot:
+     * - Jika kolom total_score tersedia (sudah berbobot di upstream), pakai nilainya apa adanya (tanpa dikali lagi).
+     * - Jika hanya ada score mentah, ambil RATA-RATA di tiap kelompok tipe lalu kali bobot tipe.
+     *   (Kalau 1 KPI per tipe, rata-rata = nilai itu sendiri).
      */
-    private function getPeerScore(int $userId, int $bulan, int $tahun): ?float
+    private function getKpiDivisiScoreWeighted(User $user, int $bulan, int $tahun): ?float
     {
-        // Ambil semua assessment id di mana YANG DINILAI = $userId
-        $assessmentIds = PeerAssessment::where([
-                'assessee_id' => $userId,
-                'bulan'       => $bulan,
-                'tahun'       => $tahun,
-            ])
-            // jika kamu pakai status 'locked' untuk yang final, aktifkan baris ini:
-            ->when(Schema::hasColumn('peer_assessments','status'), function($q){
-                $q->where('status','locked');
-            })
-            ->pluck('id');
+        $weights = $this->typeWeightsByDivision($user->division);
 
-        if ($assessmentIds->isEmpty()) return null;
-
-        // Ambil semua skor item untuk assessment-assessment tersebut
-        $scores = PeerAssessmentItem::whereIn('assessment_id', $assessmentIds)->pluck('score');
-        if ($scores->isEmpty()) return null;
-
-        $avg10 = $scores->avg();       // skala 1..10
-        $avg100 = $avg10 * 10.0;       // 0..100
-        return round($avg100, 2);
-    }
-
-    /** Renormalisasi bobot jika ada komponen yang missing (null). */
-    private function renormalizeWeights(array $values, array $weights): array
-    {
-        // $values: ['umum'=>?float, 'divisi'=>?float, 'peer'=>?float]
-        // $weights: bobot awal (0..1)
         $sum = 0.0;
-        $active = [];
-        foreach ($values as $k => $v) {
-            if ($v !== null) {
-                $active[$k] = $weights[$k];
-                $sum += $weights[$k];
+        $any = false;
+
+        // Kuantitatif (per-user)
+        $q = KpiDivisiKuantitatifRealization::where([
+                'user_id'=>$user->id,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
+            ])->get();
+
+        if ($q->isNotEmpty()) {
+            $any = true;
+            // cek apakah upstream sudah berbobot (punya total_score)
+            if ($q->first()->getAttribute('total_score') !== null) {
+                $sum += $q->sum('total_score'); // sudah berbobot -> tambahkan langsung
             } else {
-                $active[$k] = 0.0;
+                $avg = $q->avg('score') ?? 0;   // mentah -> rata-rata lalu kali bobot tipe
+                $sum += $weights['kuantitatif'] * $avg;
             }
         }
-        if ($sum <= 0) {
-            // semua null → pakai rata sama
-            return ['umum'=>1/3,'divisi'=>1/3,'peer'=>1/3];
+
+        // Kualitatif (per-user)
+        $k = KpiDivisiKualitatifRealization::where([
+                'user_id'=>$user->id,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
+            ])->get();
+
+        if ($k->isNotEmpty()) {
+            $any = true;
+            if ($k->first()->getAttribute('total_score') !== null) {
+                $sum += $k->sum('total_score');
+            } else {
+                $avg = $k->avg('score') ?? 0;
+                $sum += $weights['kualitatif'] * $avg;
+            }
         }
 
-        foreach ($active as $k => $w) {
-            $active[$k] = $w / $sum;
+        // Response (per-user)
+        $r = KpiDivisiResponseRealization::where([
+                'user_id'=>$user->id,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
+            ])->get();
+
+        if ($r->isNotEmpty()) {
+            $any = true;
+            if ($r->first()->getAttribute('total_score') !== null) {
+                $sum += $r->sum('total_score');
+            } else {
+                $avg = $r->avg('score') ?? 0;
+                $sum += $weights['response'] * $avg;
+            }
         }
-        return $active;
+
+        // Persentase (per-divisi; bisa >1 KPI)
+        $p = KpiDivisiPersentaseRealization::where([
+                'division_id'=>$user->division_id,'bulan'=>$bulan,'tahun'=>$tahun,'status'=>'approved'
+            ])->get();
+
+        if ($p->isNotEmpty()) {
+            $any = true;
+            if ($p->first()->getAttribute('total_score') !== null) {
+                $sum += $p->sum('total_score'); // diasumsikan upstream sudah masukkan bobot
+            } else {
+                // Jika ada banyak KPI persentase, bagi bobot kelompok secara merata
+                $avg = $p->avg('score') ?? 0;
+                $sum += $weights['persentase'] * $avg;
+            }
+        }
+
+        return $any ? round($sum, 2) : null;
     }
 
-    /** Band bonus sesuai skor final. */
+    private function getPeerScore(int $userId, int $bulan, int $tahun): ?float
+    {
+        $ids = PeerAssessment::where([
+                'assessee_id'=>$userId,'bulan'=>$bulan,'tahun'=>$tahun,
+            ])
+            ->when(Schema::hasColumn('peer_assessments','status'), fn($q)=>$q->where('status','locked'))
+            ->pluck('id');
+
+        if ($ids->isEmpty()) return null;
+
+        $scores = PeerAssessmentItem::whereIn('assessment_id',$ids)->pluck('score');
+        if ($scores->isEmpty()) return null;
+
+        return round($scores->avg() * 10.0, 2); // 1..10 -> 0..100
+    }
+
+    private function renormalizeWeights(array $values, array $weights): array
+    {
+        $sum = 0.0; $act = [];
+        foreach ($values as $k=>$v) {
+            if ($v !== null) { $act[$k] = $weights[$k]; $sum += $weights[$k]; }
+            else            { $act[$k] = 0.0; }
+        }
+        if ($sum <= 0) return ['umum'=>1/3,'divisi'=>1/3,'peer'=>1/3];
+        foreach ($act as $k=>$w) $act[$k] = $w / $sum;
+        return $act;
+    }
+
     private function bonusBand(float $finalScore): array
     {
-        if ($finalScore <= 100.0) {
-            return ['Kurang', 0.0];
+        if ($finalScore <= 100.0) return ['Kurang', 0.0];
+
+        if ($finalScore <= $this->BAIK_MAX) {
+            $lo=101.0; $hi=$this->BAIK_MAX;
+            $pct = 6.0 + (($finalScore-$lo)/max(1e-9,($hi-$lo))) * (9.0-6.0);
+            return ['Baik', round(max(6.0,min(9.0,$pct)),2)];
         }
 
-        if ($finalScore <= 120.0) {
-            // 101..120 -> 6..9% (linear)
-            $pct = 6.0 + ( ($finalScore - 101.0) / (120.0 - 101.0) ) * (9.0 - 6.0);
-            return ['Baik', round(max(6.0, min(9.0, $pct)), 2)];
-        }
-
-        // >120 -> 10..12% (linear, cap 12)
-        // Ambil referensi 121..140 untuk skala; di atas 140 tetap 12
-        $base = max(121.0, min(140.0, $finalScore));
-        $pct  = 10.0 + ( ($base - 121.0) / (140.0 - 121.0) ) * (12.0 - 10.0);
-        return ['Sangat Baik', round(max(10.0, min(12.0, $pct)), 2)];
+        $lo=$this->SANGAT_BAIK_START; $hi=$this->SANGAT_BAIK_LINEAR_TO;
+        $base = max($lo, min($hi, $finalScore));
+        $pct = 10.0 + (($base-$lo)/max(1e-9,($hi-$lo))) * (12.0-10.0);
+        return ['Sangat Baik', round(max(10.0,min(12.0,$pct)),2)];
     }
 }

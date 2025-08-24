@@ -10,6 +10,8 @@ class KpiUmumRealization extends Model
         'user_id','division_id','bulan','tahun','total_score','status','hr_note'
     ];
 
+    protected $casts = ['total_score' => 'float'];
+
     public function user()      { return $this->belongsTo(User::class); }
     public function division()  { return $this->belongsTo(Division::class); }
     public function items()     { return $this->hasMany(KpiUmumRealizationItem::class, 'realization_id'); }

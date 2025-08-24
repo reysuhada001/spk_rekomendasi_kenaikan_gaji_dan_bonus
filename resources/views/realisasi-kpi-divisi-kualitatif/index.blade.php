@@ -32,7 +32,7 @@
                     {{-- Filter --}}
                     <form method="GET" action="{{ route('realisasi-kpi-divisi-kualitatif.index') }}"
                         class="d-flex align-items-center ms-auto flex-wrap gap-2">
-                        {{-- Persist per_page saat filter --}}
+                        {{-- Persist per_page --}}
                         <input type="hidden" name="per_page" value="{{ $perPage }}">
 
                         <div class="input-group input-group-sm" style="width: 200px;">
@@ -120,7 +120,7 @@
                                         <td>{{ $tahun ?? '-' }}</td>
                                         <td class="text-end">
                                             @if ($r && $r->status === 'approved')
-                                                {{ rtrim(rtrim(number_format(round($r->total_score, 2), 2, '.', ''), '0'), '.') }}%
+                                                {{ rtrim(rtrim(number_format(round($r->total_score, 2), 2, '.', ''), '0'), '.') }}
                                             @else
                                                 -
                                             @endif
@@ -226,7 +226,7 @@
     <script>
         const Toast = Swal.mixin({
             toast: true,
-            position: 'top-end',
+            position: 'bottom-end',
             showConfirmButton: false,
             timer: 2500,
             timerProgressBar: true

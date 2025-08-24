@@ -104,7 +104,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @php $fmt = fn($v)=> $v!==null ? rtrim(rtrim(number_format($v,2,'.',''),'0'),'.').'%' : '-'; @endphp
+                            @php $fmt = fn($v)=> $v!==null ? rtrim(rtrim(number_format($v,2,'.',''),'0'),'.').'' : '-'; @endphp
 
                             @if (is_null($bulan) || is_null($tahun))
                                 <tr>

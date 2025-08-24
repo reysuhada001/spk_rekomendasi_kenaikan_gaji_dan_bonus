@@ -73,6 +73,29 @@ class KpiDivisiKuantitatifRealizationController extends Controller
             ->whereIn('user_id', $users->pluck('id'))
             ->get()->keyBy('user_id');
 
+        // ---- Guard ringan: bila distribusi periode/divisi berubah → tandai stale
+        if (!empty($division_id)) {
+            $dist = KpiDivisiDistribution::where('division_id',$division_id)
+                ->where('bulan',$bulan)->where('tahun',$tahun)->first();
+
+            foreach ($realByUser as $uid => $hdr) {
+                $shouldStale = false;
+                if (!$dist || in_array($dist->status, ['rejected','stale'], true)) {
+                    $shouldStale = true;
+                } elseif ($dist->updated_at && $hdr->updated_at && $dist->updated_at->gt($hdr->updated_at)) {
+                    $shouldStale = true;
+                }
+
+                if ($shouldStale && $hdr->status !== 'stale') {
+                    $hdr->update([
+                        'status'      => 'stale',
+                        'hr_note'     => $hdr->hr_note ?: 'Perubahan distribusi/target. Leader wajib input ulang.',
+                        'total_score' => null
+                    ]);
+                }
+            }
+        }
+
         return view('realisasi-kpi-divisi-kuantitatif.index', [
             'me'=>$me,'users'=>$users,'bulan'=>$bulan,'tahun'=>$tahun,'division_id'=>$division_id,
             'divisions'=>$divisions,'bulanList'=>$this->bulanList,'perPage'=>$perPage,'search'=>$search,
@@ -224,7 +247,7 @@ class KpiDivisiKuantitatifRealizationController extends Controller
             foreach ($rows as $r) {
                 KpiDivisiKuantitatifRealizationItem::create([
                     'realization_id'=>$real->id,
-                    'user_id'       =>$user->id, // << WAJIB
+                    'user_id'       =>$user->id,
                     'kpi_divisi_id' =>$r['kpi_divisi_id'],
                     'target'        =>$r['target'],
                     'realization'   =>$r['realization'],

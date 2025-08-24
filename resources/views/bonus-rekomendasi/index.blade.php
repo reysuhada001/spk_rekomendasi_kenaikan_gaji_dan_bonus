@@ -122,11 +122,6 @@
                                         $x = rtrim(rtrim(number_format((float) $v, $dec, '.', ''), '0'), '.');
                                         return $suffix ? $x . $suffix : $x;
                                     };
-
-                                    // bobot
-                                    $wu = $r['w']['umum'] ?? 0;
-                                    $wd = $r['w']['divisi'] ?? 0;
-                                    $wp = $r['w']['peer'] ?? 0;
                                 @endphp
                                 <tr>
                                     <td>{{ ($users->currentPage() - 1) * $users->perPage() + $i + 1 }}</td>
@@ -135,15 +130,13 @@
                                     <td>{{ $bulan ? $bulanList[$bulan] : '-' }}</td>
                                     <td>{{ $tahun ?? '-' }}</td>
 
-                                    {{-- KPI Umum/Divisi/Peer (tanpa bobot) --}}
-                                    <td class="text-end">{{ $fmt($r['kpi_umum'] ?? null, 2, '%') }}</td>
-                                    <td class="text-end">{{ $fmt($r['kpi_divisi'] ?? null, 2, '%') }}</td>
-                                    <td class="text-end">{{ $fmt($r['peer'] ?? null, 2, '%') }}</td>
-
-
+                                    {{-- KPI Umum/Divisi/Peer (tanpa bobot AHP) --}}
+                                    <td class="text-end">{{ $fmt($r['kpi_umum'] ?? null) }}</td>
+                                    <td class="text-end">{{ $fmt($r['kpi_divisi'] ?? null) }}</td>
+                                    <td class="text-end">{{ $fmt($r['peer'] ?? null) }}</td>
 
                                     {{-- Skor Final + Label + Bonus --}}
-                                    <td class="fw-semibold text-end">{{ $fmt($r['final'] ?? 0, 2, '%') }}</td>
+                                    <td class="fw-semibold text-end">{{ $fmt($r['final'] ?? 0) }}</td>
                                     <td>
                                         @php
                                             $label = $r['label'] ?? '-';
@@ -162,7 +155,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="12" class="text-muted py-4 text-center">Tidak ada data.</td>
+                                    <td colspan="11" class="text-muted py-4 text-center">Tidak ada data.</td>
                                 </tr>
                             @endforelse
                         </tbody>

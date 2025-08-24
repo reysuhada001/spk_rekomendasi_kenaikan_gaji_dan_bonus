@@ -119,7 +119,7 @@
                                         <td>{{ $tahun }}</td>
                                         <td class="text-end">
                                             @if ($r)
-                                                {{ rtrim(rtrim(number_format($r['final'], 2, '.', ''), '0'), '.') }}%
+                                                {{ rtrim(rtrim(number_format($r['final'], 2, '.', ''), '0'), '.') }}
                                             @else
                                                 -
                                             @endif

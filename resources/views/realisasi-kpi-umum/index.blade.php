@@ -127,7 +127,7 @@
                                         <td>{{ $tahun ?? '-' }}</td>
                                         <td class="text-end">
                                             @if ($r && $r->status === 'approved')
-                                                {{ rtrim(rtrim(number_format(round($r->total_score, 2), 2, '.', ''), '0'), '.') }}%
+                                                {{ rtrim(rtrim(number_format(round($r->total_score, 2), 2, '.', ''), '0'), '.') }}
                                             @elseif ($r && $r->status === 'stale')
                                                 <span class="text-muted"
                                                     title="Perlu input ulang karena perubahan KPI">-</span>

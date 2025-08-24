@@ -21,8 +21,7 @@
                             <select name="per_page" class="form-select" onchange="this.form.submit()">
                                 @foreach ([10, 25, 50, 75, 100] as $pp)
                                     <option value="{{ $pp }}" {{ (int) $perPage === $pp ? 'selected' : '' }}>
-                                        {{ $pp }}
-                                    </option>
+                                        {{ $pp }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -32,17 +31,14 @@
                     {{-- Filter --}}
                     <form method="GET" action="{{ route('realisasi-kpi-divisi-persentase.index') }}"
                         class="d-flex align-items-center ms-auto flex-wrap gap-2">
-                        {{-- Persist per_page saat filter --}}
                         <input type="hidden" name="per_page" value="{{ $perPage }}">
-
                         <div class="input-group input-group-sm" style="width: 200px;">
                             <span class="input-group-text"><i class="bx bx-calendar"></i>&nbsp;Bulan</span>
                             <select name="bulan" class="form-select">
                                 <option value="" {{ is_null($bulan) ? 'selected' : '' }}>Pilih Bulan</option>
                                 @foreach ($bulanList as $num => $label)
                                     <option value="{{ $num }}"
-                                        {{ (string) $bulan === (string) $num ? 'selected' : '' }}>
-                                        {{ $label }}
+                                        {{ (string) $bulan === (string) $num ? 'selected' : '' }}>{{ $label }}
                                     </option>
                                 @endforeach
                             </select>
@@ -63,8 +59,7 @@
                                     @foreach ($divisions as $d)
                                         <option value="{{ $d->id }}"
                                             {{ (string) $division_id === (string) $d->id ? 'selected' : '' }}>
-                                            {{ $d->name }}
-                                        </option>
+                                            {{ $d->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -98,7 +93,7 @@
                                 <th>NAMA KPI</th>
                                 <th class="text-end">TARGET</th>
                                 <th class="text-end">REALISASI</th>
-                                <th class="text-end">SKOR</th>
+                                <th class="text-end">SKOR (Berbobot)</th>
                                 <th>BULAN</th>
                                 <th>TAHUN</th>
                                 <th style="width:320px">AKSI</th>
@@ -111,8 +106,15 @@
                                 </tr>
                             @else
                                 @forelse ($kpis as $i => $k)
-                                    @php $r = $realByKpi[$k->id] ?? null; @endphp
-                                    @php $needsReinput = !$r || in_array($r->status, ['rejected','stale'], true); @endphp
+                                    @php
+                                        $r = $realByKpi[$k->id] ?? null;
+                                        $needsReinput = !$r || in_array($r->status, ['rejected', 'stale'], true);
+                                        $ws =
+                                            $r->weighted_score ??
+                                            (!is_null($r->score ?? null)
+                                                ? round($r->score * (float) ($k->bobot ?? 1), 2)
+                                                : null);
+                                    @endphp
                                     <tr>
                                         <td>{{ ($kpis->currentPage() - 1) * $kpis->perPage() + $i + 1 }}</td>
                                         <td>{{ $k->division?->name ?? '-' }}</td>
@@ -130,12 +132,8 @@
                                             @endif
                                         </td>
                                         <td class="text-end">
-                                            @if ($r && $r->status === 'approved' && !is_null($r->score))
-                                                {{ rtrim(rtrim(number_format($r->score, 2, '.', ''), '0'), '.') }}%
-                                            @elseif ($r && $r->status === 'submitted' && !is_null($r->score))
-                                                <span class="text-muted">
-                                                    {{ rtrim(rtrim(number_format($r->score, 2, '.', ''), '0'), '.') }}%
-                                                </span>
+                                            @if ($r && $r->status === 'approved' && !is_null($ws))
+                                                {{ rtrim(rtrim(number_format($ws, 2, '.', ''), '0'), '.') }}
                                             @else
                                                 -
                                             @endif
@@ -143,7 +141,6 @@
                                         <td>{{ $bulanList[$k->bulan] ?? $k->bulan }}</td>
                                         <td>{{ $k->tahun }}</td>
                                         <td>
-                                            {{-- ICON-ONLY + info di samping (nowrap) --}}
                                             @if ($me->role === 'leader')
                                                 @if ($needsReinput)
                                                     <div class="d-flex align-items-center flex-nowrap gap-2">
@@ -153,8 +150,6 @@
                                                             aria-label="@if (!$r) Input @elseif($r->status === 'rejected') Ajukan Ulang @else Input Ulang @endif">
                                                             <i class="bx bx-edit"></i>
                                                         </a>
-
-                                                        {{-- Keterangan di samping ikon --}}
                                                         @if ($r && $r->status === 'stale')
                                                             <small class="text-warning d-flex align-items-center"
                                                                 style="white-space: nowrap;">
@@ -177,17 +172,13 @@
                                                 @else
                                                     <a class="btn btn-icon btn-sm btn-outline-secondary"
                                                         href="{{ route('realisasi-kpi-divisi-persentase.show', $r->id) }}"
-                                                        title="Detail" aria-label="Detail">
-                                                        <i class="bx bx-show"></i>
-                                                    </a>
+                                                        title="Detail" aria-label="Detail"><i class="bx bx-show"></i></a>
                                                 @endif
                                             @elseif (in_array($me->role, ['hr', 'owner']))
                                                 @if ($r)
                                                     <a class="btn btn-icon btn-sm btn-outline-secondary"
                                                         href="{{ route('realisasi-kpi-divisi-persentase.show', $r->id) }}"
-                                                        title="Detail" aria-label="Detail">
-                                                        <i class="bx bx-show"></i>
-                                                    </a>
+                                                        title="Detail" aria-label="Detail"><i class="bx bx-show"></i></a>
                                                 @else
                                                     <span class="text-muted">-</span>
                                                 @endif
@@ -196,9 +187,7 @@
                                                 @if ($me->division_id === $k->division_id && $r)
                                                     <a class="btn btn-icon btn-sm btn-outline-secondary"
                                                         href="{{ route('realisasi-kpi-divisi-persentase.show', $r->id) }}"
-                                                        title="Detail" aria-label="Detail">
-                                                        <i class="bx bx-show"></i>
-                                                    </a>
+                                                        title="Detail" aria-label="Detail"><i class="bx bx-show"></i></a>
                                                 @else
                                                     <span class="text-muted">-</span>
                                                 @endif
@@ -219,10 +208,10 @@
                 @php
                     $from = $kpis->count() ? $kpis->firstItem() : 0;
                     $to = $kpis->count() ? $kpis->lastItem() : 0;
-                    $total = $kpis->total();
+                    $tot = $kpis->total();
                 @endphp
                 <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
-                    <small class="text-muted">Showing {{ $from }} to {{ $to }} of {{ $total }}
+                    <small class="text-muted">Showing {{ $from }} to {{ $to }} of {{ $tot }}
                         entries</small>
                     @if ($kpis->hasPages())
                         {{ $kpis->onEachSide(1)->links() }}
@@ -244,7 +233,7 @@
     <script>
         const Toast = Swal.mixin({
             toast: true,
-            position: 'top-end',
+            position: 'bottom-end',
             showConfirmButton: false,
             timer: 2500,
             timerProgressBar: true
